@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:mariadb://localhost:3306/salesboost
+    username: root
+    password: root
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+mybatis:
+  mapper-locations: classpath:mappers/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  jwt:
+    secret: change-this-to-very-long-secret-key-at-least-32bytes
+    expiration-seconds: 3600
+  file:
+    upload-dir: uploads
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
