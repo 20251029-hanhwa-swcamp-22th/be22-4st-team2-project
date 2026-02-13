@@ -1,17 +1,14 @@
 package com.salesboost.domain.inquiry.dto;
 
-import com.salesboost.domain.inquiry.entity.Inquiry;
 import com.salesboost.domain.inquiry.entity.InquiryStatus;
 import com.salesboost.domain.inquiry.entity.InquiryType;
-import lombok.Builder;
+import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-import java.time.LocalDateTime;
-
 @Getter
-@Builder
+@AllArgsConstructor
 public class InquiryDetailResponse {
-
     private Long id;
     private String companyName;
     private String contactName;
@@ -23,20 +20,4 @@ public class InquiryDetailResponse {
     private String adminMemo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public static InquiryDetailResponse from(Inquiry inquiry) {
-        return InquiryDetailResponse.builder()
-                .id(inquiry.getId())
-                .companyName(inquiry.getCompanyName())
-                .contactName(inquiry.getContactName())
-                .email(inquiry.getEmail())
-                .phone(inquiry.getPhone())
-                .inquiryType(inquiry.getInquiryType())
-                .content(inquiry.getContent())
-                .status(inquiry.getStatus())
-                .adminMemo(inquiry.getAdminMemo())
-                .createdAt(inquiry.getCreatedAt())
-                .updatedAt(inquiry.getUpdatedAt())
-                .build();
-    }
 }

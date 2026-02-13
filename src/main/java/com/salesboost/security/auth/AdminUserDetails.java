@@ -1,16 +1,13 @@
 package com.salesboost.security.auth;
 
 import com.salesboost.domain.admin.entity.AdminUser;
-import lombok.Getter;
+import java.util.Collection;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.Collection;
-import java.util.List;
-
-@Getter
 @RequiredArgsConstructor
 public class AdminUserDetails implements UserDetails {
 
@@ -18,7 +15,7 @@ public class AdminUserDetails implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        return List.of(new SimpleGrantedAuthority(adminUser.getRole()));
     }
 
     @Override
@@ -48,18 +45,6 @@ public class AdminUserDetails implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
-    }
-
-    public Long getId() {
-        return adminUser.getId();
-    }
-
-    public String getName() {
-        return adminUser.getName();
-    }
-
-    public String getEmail() {
-        return adminUser.getEmail();
+        return adminUser.isEnabled();
     }
 }

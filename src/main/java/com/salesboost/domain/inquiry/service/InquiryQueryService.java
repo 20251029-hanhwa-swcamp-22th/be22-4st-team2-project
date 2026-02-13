@@ -1,19 +1,16 @@
 package com.salesboost.domain.inquiry.service;
 
+import com.salesboost.common.exception.BusinessException;
+import com.salesboost.common.exception.ErrorCode;
 import com.salesboost.domain.inquiry.dto.InquiryDetailResponse;
 import com.salesboost.domain.inquiry.dto.InquiryListItemResponse;
+import com.salesboost.domain.inquiry.dto.InquiryListResponse;
 import com.salesboost.domain.inquiry.entity.Inquiry;
-import com.salesboost.domain.inquiry.entity.InquiryStatus;
 import com.salesboost.domain.inquiry.mapper.InquiryQueryMapper;
 import com.salesboost.domain.inquiry.repository.InquiryRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -23,33 +20,38 @@ public class InquiryQueryService {
     private final InquiryQueryMapper inquiryQueryMapper;
     private final InquiryRepository inquiryRepository;
 
-    /**
-     * 문의 목록 조회 (필터링, 검색, 페이징)
-     */
-    public Page<InquiryListItemResponse> getInquiries(
-            InquiryStatus status,
-            String keyword,
-            Pageable pageable
-    ) {
-        int offset = (int) pageable.getOffset();
-        int size = pageable.getPageSize();
+    public InquiryListResponse getInquiries(String status, String keyword, String sort, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(size, 1);
+        int offset = (safePage - 1) * safeSize;
 
-        List<InquiryListItemResponse> inquiries = inquiryQueryMapper.findInquiries(
-                status, keyword, offset, size
-        );
+        String safeSort = (sort == null || sort.isBlank()) ? "latest" : sort;
+        if (!safeSort.equals("latest") && !safeSort.equals("oldest")) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "sort는 latest 또는 oldest만 가능합니다.");
+        }
 
-        long total = inquiryQueryMapper.countInquiries(status, keyword);
+        var items = inquiryQueryMapper.findInquiries(status, keyword, safeSort, safeSize, offset);
+        long totalCount = inquiryQueryMapper.countInquiries(status, keyword);
 
-        return new PageImpl<>(inquiries, pageable, total);
+        return new InquiryListResponse(items, totalCount, safePage, safeSize);
     }
 
-    /**
-     * 문의 상세 조회
-     */
-    public InquiryDetailResponse getInquiryDetail(Long id) {
-        Inquiry inquiry = inquiryRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("문의를 찾을 수 없습니다. ID: " + id));
+    public InquiryDetailResponse getInquiry(Long inquiryId) {
+        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
 
-        return InquiryDetailResponse.from(inquiry);
+        return new InquiryDetailResponse(
+                inquiry.getId(),
+                inquiry.getCompanyName(),
+                inquiry.getContactName(),
+                inquiry.getEmail(),
+                inquiry.getPhone(),
+                inquiry.getInquiryType(),
+                inquiry.getContent(),
+                inquiry.getStatus(),
+                inquiry.getAdminMemo(),
+                inquiry.getCreatedAt(),
+                inquiry.getUpdatedAt()
+        );
     }
 }

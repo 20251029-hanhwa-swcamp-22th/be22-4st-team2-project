@@ -1,77 +1,72 @@
 package com.salesboost.domain.inquiry.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
-import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "inquiries")
+@Table(name = "inquiry")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EntityListeners(AuditingEntityListener.class)
 public class Inquiry {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 150)
     private String companyName;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = 100)
     private String contactName;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 150)
     private String email;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private String phone;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private InquiryType inquiryType;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, length = 3000)
     private String content;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private InquiryStatus status = InquiryStatus.PENDING;
+    @Column(nullable = false, length = 30)
+    private InquiryStatus status;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 3000)
     private String adminMemo;
 
-    @CreatedDate
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @LastModifiedDate
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    @Builder
-    public Inquiry(String companyName, String contactName, String email, String phone,
-                   InquiryType inquiryType, String content) {
-        this.companyName = companyName;
-        this.contactName = contactName;
-        this.email = email;
-        this.phone = phone;
-        this.inquiryType = inquiryType;
-        this.content = content;
-        this.status = InquiryStatus.PENDING;
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
+        if (this.status == null) {
+            this.status = InquiryStatus.PENDING;
+        }
     }
 
-    public void updateStatus(InquiryStatus status) {
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void changeStatus(InquiryStatus status) {
         this.status = status;
     }
 
-    public void updateMemo(String memo) {
+    public void changeAdminMemo(String memo) {
         this.adminMemo = memo;
     }
 }

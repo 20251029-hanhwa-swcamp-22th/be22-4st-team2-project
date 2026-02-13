@@ -1,80 +1,72 @@
 package com.salesboost.security.jwt;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Component;
-
-import javax.crypto.SecretKey;
+import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.stereotype.Component;
 
-@Slf4j
 @Component
 public class JwtProvider {
 
-    private final SecretKey secretKey;
+    private final UserDetailsService userDetailsService;
+    private final String secret;
     private final long expirationSeconds;
 
+    private SecretKey signingKey;
+
     public JwtProvider(
+            UserDetailsService userDetailsService,
             @Value("${app.jwt.secret}") String secret,
-            @Value("${app.jwt.expiration-seconds}") long expirationSeconds
+            @Value("${app.jwt.expiration-seconds:3600}") long expirationSeconds
     ) {
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.userDetailsService = userDetailsService;
+        this.secret = secret;
         this.expirationSeconds = expirationSeconds;
     }
 
-    /**
-     * JWT 토큰 생성
-     */
-    public String generateToken(Authentication authentication) {
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+    @PostConstruct
+    void init() {
+        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public String generateToken(String username) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expirationSeconds * 1000);
+        Date expiry = new Date(now.getTime() + expirationSeconds * 1000);
 
         return Jwts.builder()
-                .subject(userDetails.getUsername())
+                .subject(username)
                 .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(secretKey)
+                .expiration(expiry)
+                .signWith(signingKey)
                 .compact();
     }
 
-    /**
-     * 토큰에서 사용자명 추출
-     */
-    public String getUsernameFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-
-        return claims.getSubject();
-    }
-
-    /**
-     * 토큰 유효성 검증
-     */
     public boolean validateToken(String token) {
         try {
-            Jwts.parser()
-                    .verifyWith(secretKey)
-                    .build()
-                    .parseSignedClaims(token);
+            Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token);
             return true;
-        } catch (SecurityException | MalformedJwtException e) {
-            log.error("잘못된 JWT 서명입니다.", e);
-        } catch (ExpiredJwtException e) {
-            log.error("만료된 JWT 토큰입니다.", e);
-        } catch (UnsupportedJwtException e) {
-            log.error("지원되지 않는 JWT 토큰입니다.", e);
-        } catch (IllegalArgumentException e) {
-            log.error("JWT 토큰이 잘못되었습니다.", e);
+        } catch (Exception e) {
+            return false;
         }
-        return false;
+    }
+
+    public Authentication getAuthentication(String token) {
+        String username = getUsername(token);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+    }
+
+    private String getUsername(String token) {
+        Claims claims = Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
+        return claims.getSubject();
     }
 }

@@ -1,23 +1,17 @@
 package com.salesboost.domain.portfolio.entity;
 
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "portfolios")
+@Table(name = "portfolio")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EntityListeners(AuditingEntityListener.class)
 public class Portfolio {
 
     @Id
@@ -27,70 +21,77 @@ public class Portfolio {
     @Column(nullable = false, length = 200)
     private String title;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, length = 3000)
     private String description;
 
-    @Column(nullable = false, length = 100)
-    private String client;
+    @Column(nullable = false, length = 150)
+    private String clientName;
 
     @Column(nullable = false, length = 100)
     private String industry;
 
-    @Column(length = 500)
+    @Column(length = 1000)
     private String thumbnailUrl;
 
     @Column(nullable = false)
-    private Boolean isVisible = true;
+    private boolean visible;
 
     @Column(nullable = false)
-    private Integer displayOrder = 0;
+    private int displayOrder;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
+
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PortfolioImage> images = new ArrayList<>();
 
-    @CreatedDate
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
+    }
 
-    @LastModifiedDate
-    private LocalDateTime updatedAt;
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 
-    @Builder
-    public Portfolio(String title, String description, String client, String industry, String thumbnailUrl, Boolean isVisible, Integer displayOrder) {
+    public static Portfolio create(String title, String description, String clientName, String industry, String thumbnailUrl) {
+        Portfolio portfolio = new Portfolio();
+        portfolio.title = title;
+        portfolio.description = description;
+        portfolio.clientName = clientName;
+        portfolio.industry = industry;
+        portfolio.thumbnailUrl = thumbnailUrl;
+        portfolio.visible = true;
+        portfolio.displayOrder = 0;
+        return portfolio;
+    }
+
+    public void update(String title, String description, String clientName, String industry, String thumbnailUrl) {
         this.title = title;
         this.description = description;
-        this.client = client;
+        this.clientName = clientName;
         this.industry = industry;
         this.thumbnailUrl = thumbnailUrl;
-        this.isVisible = isVisible != null ? isVisible : true;
-        this.displayOrder = displayOrder != null ? displayOrder : 0;
     }
 
-    public void update(String title, String description, String client, String industry, String thumbnailUrl) {
-        this.title = title;
-        this.description = description;
-        this.client = client;
-        this.industry = industry;
-        if (thumbnailUrl != null) {
-            this.thumbnailUrl = thumbnailUrl;
-        }
+    public void updateVisibility(boolean visible) {
+        this.visible = visible;
     }
 
-    public void updateVisibility(Boolean isVisible) {
-        this.isVisible = isVisible;
-    }
-
-    public void updateDisplayOrder(Integer displayOrder) {
+    public void updateDisplayOrder(int displayOrder) {
         this.displayOrder = displayOrder;
+    }
+
+    public void clearImages() {
+        this.images.clear();
     }
 
     public void addImage(PortfolioImage image) {
         this.images.add(image);
-        image.setPortfolio(this);
-    }
-
-    public void removeImage(PortfolioImage image) {
-        this.images.remove(image);
-        image.setPortfolio(null);
     }
 }
