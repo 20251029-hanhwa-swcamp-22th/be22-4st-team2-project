@@ -1,7 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper
-  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
-  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.salesboost.domain.inquiry.mapper.InquiryQueryMapper">
-    <!-- TODO: 목록/검색/페이징 전용 쿼리 정의 -->
+
+    <select id="findInquiries" resultType="com.salesboost.domain.inquiry.dto.InquiryListItemResponse">
+        SELECT
+            id,
+            company_name AS companyName,
+            contact_name AS contactName,
+            email,
+            phone,
+            inquiry_type AS inquiryType,
+            status,
+            created_at AS createdAt
+        FROM inquiry
+        <where>
+            <if test="status != null and status != ''">
+                status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    company_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR contact_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR email LIKE CONCAT('%', #{keyword}, '%')
+                    OR content LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+
+        <choose>
+            <when test="sort == 'oldest'">ORDER BY created_at ASC</when>
+            <otherwise>ORDER BY created_at DESC</otherwise>
+        </choose>
+
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countInquiries" resultType="long">
+        SELECT COUNT(*)
+        FROM inquiry
+        <where>
+            <if test="status != null and status != ''">
+                status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    company_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR contact_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR email LIKE CONCAT('%', #{keyword}, '%')
+                    OR content LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+    </select>
+
 </mapper>

@@ -1,14 +1,13 @@
 package com.salesboost.domain.portfolio.dto;
 
 import jakarta.validation.constraints.NotNull;
-import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
-public class PortfolioVisibilityOrderRequest {
+public class PortfolioVisibilityRequest {
 
-    @NotNull(message = "portfolioIds는 필수입니다.")
-    private List<Long> portfolioIds;
+    @NotNull(message = "visible은 필수입니다.")
+    private Boolean visible;
 }
