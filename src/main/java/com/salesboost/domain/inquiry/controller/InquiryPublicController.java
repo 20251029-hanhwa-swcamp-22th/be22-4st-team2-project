@@ -23,6 +23,6 @@ public class InquiryPublicController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<Long> createInquiry(@Valid @RequestBody InquiryCreateRequest request) {
         Long inquiryId = inquiryService.createInquiry(request);
-        return ApiResponse.success("제휴 문의가 정상적으로 등록되었습니다.", inquiryId);
+        return ApiResponse.ok("제휴 문의가 정상적으로 등록되었습니다.", inquiryId);
     }
 }

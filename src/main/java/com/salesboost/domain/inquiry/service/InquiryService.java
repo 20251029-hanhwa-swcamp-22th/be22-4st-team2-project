@@ -2,6 +2,7 @@ package com.salesboost.domain.inquiry.service;
 
 import com.salesboost.common.exception.BusinessException;
 import com.salesboost.common.exception.ErrorCode;
+import com.salesboost.domain.inquiry.dto.InquiryCreateRequest;
 import com.salesboost.domain.inquiry.dto.InquiryMemoUpdateRequest;
 import com.salesboost.domain.inquiry.dto.InquiryStatusUpdateRequest;
 import com.salesboost.domain.inquiry.entity.Inquiry;
@@ -16,6 +17,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class InquiryService {
 
     private final InquiryRepository inquiryRepository;
+
+    public Long createInquiry(InquiryCreateRequest request) {
+        Inquiry inquiry = request.toEntity();
+        Inquiry saved = inquiryRepository.save(inquiry);
+        return saved.getId();
+    }
 
     public void updateStatus(Long inquiryId, InquiryStatusUpdateRequest request) {
         Inquiry inquiry = inquiryRepository.findById(inquiryId)
