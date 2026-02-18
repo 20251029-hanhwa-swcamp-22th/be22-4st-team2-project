@@ -1,0 +1,52 @@
+erDiagram
+    ADMIN {
+        bigint id PK "관리자 ID (AUTO_INCREMENT)"
+        varchar username UK "로그인 아이디"
+        varchar password "비밀번호 (BCrypt)"
+        varchar name "관리자 이름"
+        varchar role "역할 (SUPER_ADMIN, ADMIN)"
+        datetime created_at "생성일시"
+        datetime updated_at "수정일시"
+    }
+
+    PARTNERSHIP_INQUIRY {
+        bigint id PK "문의 ID (AUTO_INCREMENT)"
+        varchar company_name "기업명"
+        varchar contact_name "담당자명"
+        varchar email "이메일"
+        varchar phone "전화번호"
+        varchar inquiry_type "문의 유형 (도입문의/기술문의/제휴제안/기타)"
+        text content "문의 내용"
+        varchar status "상태 (NEW/IN_PROGRESS/COMPLETED)"
+        text admin_memo "관리자 메모"
+        bigint handled_by FK "처리 관리자 ID"
+        tinyint privacy_agreed "개인정보 동의 여부"
+        datetime created_at "접수일시"
+        datetime updated_at "수정일시"
+    }
+
+    PORTFOLIO {
+        bigint id PK "포트폴리오 ID (AUTO_INCREMENT)"
+        varchar title "제목"
+        varchar client_name "고객사명"
+        varchar summary "요약 설명"
+        varchar thumbnail_url "썸네일 이미지 URL"
+        text detail_content "상세 내용 (HTML)"
+        int display_order "표시 순서"
+        tinyint is_active "활성 여부 (0/1)"
+        bigint created_by FK "등록 관리자 ID"
+        datetime created_at "생성일시"
+        datetime updated_at "수정일시"
+    }
+
+    REFRESH_TOKEN {
+        bigint id PK "토큰 ID (AUTO_INCREMENT)"
+        bigint admin_id FK "관리자 ID"
+        varchar token UK "Refresh Token"
+        datetime expires_at "만료일시"
+        datetime created_at "생성일시"
+    }
+
+    ADMIN ||--o{ PARTNERSHIP_INQUIRY : "handles"
+    ADMIN ||--o{ PORTFOLIO : "creates"
+    ADMIN ||--o{ REFRESH_TOKEN : "has"
