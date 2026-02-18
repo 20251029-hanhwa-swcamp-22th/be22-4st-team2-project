@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: salesboost-ingress
+  annotations:
+    # nginx ingress controller 사용 시 필요
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    # /api/ 요청 시 백엔드로 프록시 (rewrite 없이 그대로 전달)
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: localhost
+      http:
+        paths:
+          # /api/** → 백엔드 서비스 (ClusterIP)
+          - path: /api/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: salesboost-backend
+                port:
+                  number: 8080
+          # / → 프론트엔드 서비스
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: salesboost-frontend
+                port:
+                  number: 80

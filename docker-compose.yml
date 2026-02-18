@@ -1,0 +1,43 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mariadb://mariadb:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:5173,http://localhost:3000
+    depends_on:
+      - mariadb
+    networks:
+      - salesboost-network
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - salesboost-network
+
+  mariadb:
+    image: mariadb:10.11
+    environment:
+      - MARIADB_DATABASE=salesboost
+      - MARIADB_ROOT_PASSWORD=root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./infra/docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - salesboost-network
+
+volumes:
+  mariadb_data:
+
+networks:
+  salesboost-network:
+    driver: bridge
