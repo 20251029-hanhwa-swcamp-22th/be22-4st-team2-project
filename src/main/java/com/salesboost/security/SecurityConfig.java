@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/admin/login", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/portfolios/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/inquiries").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

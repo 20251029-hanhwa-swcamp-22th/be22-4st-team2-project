@@ -3,6 +3,7 @@ package com.salesboost.domain.inquiry.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -68,5 +69,19 @@ public class Inquiry {
 
     public void changeAdminMemo(String memo) {
         this.adminMemo = memo;
+    }
+
+    @Builder
+    public static Inquiry create(String companyName, String contactName, String email,
+                                  String phone, InquiryType inquiryType, String content) {
+        Inquiry inquiry = new Inquiry();
+        inquiry.companyName = companyName;
+        inquiry.contactName = contactName;
+        inquiry.email = email;
+        inquiry.phone = phone;
+        inquiry.inquiryType = inquiryType;
+        inquiry.content = content;
+        inquiry.status = InquiryStatus.PENDING;
+        return inquiry;
     }
 }
