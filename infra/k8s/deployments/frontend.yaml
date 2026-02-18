@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: salesboost-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: salesboost-frontend
+  template:
+    metadata:
+      labels:
+        app: salesboost-frontend
+    spec:
+      containers:
+        - name: salesboost-frontend
+          image: salesboost-frontend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: salesboost-frontend
+spec:
+  selector:
+    app: salesboost-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: LoadBalancer

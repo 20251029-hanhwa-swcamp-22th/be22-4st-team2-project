@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: salesboost-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: salesboost-backend
+  template:
+    metadata:
+      labels:
+        app: salesboost-backend
+    spec:
+      containers:
+        - name: salesboost-backend
+          image: salesboost-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mariadb://salesboost-db:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false
+            - name: SPRING_DATASOURCE_USERNAME
+              value: root
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: salesboost-backend
+spec:
+  selector:
+    app: salesboost-backend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
