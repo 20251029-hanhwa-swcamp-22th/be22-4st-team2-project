@@ -1,33 +1,33 @@
 erDiagram
     ADMIN_USER {
-        bigint id PK "관리자 ID (AUTO_INCREMENT)"
-        varchar(100) username UK "로그인 아이디"
-        varchar(255) password "비밀번호 (BCrypt)"
-        varchar(50) role "역할 (ROLE_ADMIN 등)"
+        bigint id PK "관리자 ID"
+        varchar100 username UK "로그인 아이디"
+        varchar255 password "비밀번호 BCrypt"
+        varchar50 role "역할 ROLE_ADMIN"
         boolean enabled "활성 여부"
     }
 
     INQUIRY {
-        bigint id PK "문의 ID (AUTO_INCREMENT)"
-        varchar(150) company_name "기업명"
-        varchar(100) contact_name "담당자명"
-        varchar(150) email "이메일"
-        varchar(30) phone "전화번호"
-        varchar(30) inquiry_type "문의 유형 (GENERAL/PARTNERSHIP/QUOTE/ETC)"
-        varchar(3000) content "문의 내용"
-        varchar(30) status "상태 (PENDING/IN_PROGRESS/DONE)"
-        varchar(3000) admin_memo "관리자 메모"
+        bigint id PK "문의 ID"
+        varchar150 company_name "기업명"
+        varchar100 contact_name "담당자명"
+        varchar150 email "이메일"
+        varchar30 phone "전화번호"
+        varchar30 inquiry_type "PARTNERSHIP|DEMO|PRICING|SUPPORT|OTHER"
+        varchar3000 content "문의 내용"
+        varchar30 status "PENDING|IN_PROGRESS|DONE"
+        varchar3000 admin_memo "관리자 메모"
         datetime created_at "접수일시"
         datetime updated_at "수정일시"
     }
 
     PORTFOLIO {
-        bigint id PK "포트폴리오 ID (AUTO_INCREMENT)"
-        varchar(200) title "제목"
-        varchar(3000) description "설명"
-        varchar(150) client_name "고객사명"
-        varchar(100) industry "산업 분야"
-        varchar(1000) thumbnail_url "썸네일 이미지 URL"
+        bigint id PK "포트폴리오 ID"
+        varchar200 title "제목"
+        varchar3000 description "설명"
+        varchar150 client_name "고객사명"
+        varchar100 industry "산업 분야"
+        varchar1000 thumbnail_url "썸네일 이미지 URL"
         boolean visible "공개 여부"
         int display_order "표시 순서"
         datetime created_at "생성일시"
@@ -35,9 +35,9 @@ erDiagram
     }
 
     PORTFOLIO_IMAGE {
-        bigint id PK "이미지 ID (AUTO_INCREMENT)"
+        bigint id PK "이미지 ID"
         bigint portfolio_id FK "포트폴리오 ID"
-        varchar(1000) image_url "이미지 URL"
+        varchar1000 image_url "이미지 URL"
         int image_order "이미지 순서"
     }
 

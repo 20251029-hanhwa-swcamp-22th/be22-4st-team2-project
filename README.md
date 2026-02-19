@@ -66,7 +66,7 @@ erDiagram
         varchar(100) contact_name "담당자명"
         varchar(150) email "이메일"
         varchar(30) phone "전화번호"
-        varchar(30) inquiry_type "문의 유형 (GENERAL/PARTNERSHIP/QUOTE/ETC)"
+        varchar(30) inquiry_type "문의 유형 (PARTNERSHIP/DEMO/PRICING/SUPPORT/OTHER)"
         varchar(3000) content "문의 내용"
         varchar(30) status "상태 (PENDING/IN_PROGRESS/DONE)"
         varchar(3000) admin_memo "관리자 메모"

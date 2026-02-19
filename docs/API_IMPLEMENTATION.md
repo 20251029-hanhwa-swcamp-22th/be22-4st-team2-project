@@ -98,7 +98,7 @@
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| POST | `/api/admin/auth/login` | 관리자 로그인 (JWT 발급) |
+| POST | `/api/admin/login` | 관리자 로그인 (JWT 발급) |
 
 **Request:**
 ```json
@@ -331,5 +331,4 @@ src/main/java/com/salesboost/
 구현 관련 문의사항이 있으시면 팀원에게 연락해주세요.
 
 - 백엔드: 강성훈, 박찬진
-- 인프라: 최현지
-- 프론트엔드: 정진호
+- 프론트엔드 & 인프라: 정진호
