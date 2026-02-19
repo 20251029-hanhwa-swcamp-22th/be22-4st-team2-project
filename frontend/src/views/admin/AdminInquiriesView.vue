@@ -47,10 +47,9 @@ const statusLabels = {
 
 const inquiryTypeLabels = {
   PARTNERSHIP: '제휴 문의',
-  DEMO: '데모 요청',
-  PRICING: '가격 문의',
-  SUPPORT: '기술 지원',
-  OTHER: '기타 문의'
+  GENERAL: '일반 문의',
+  QUOTE: '견적 문의',
+  ETC: '기타 문의'
 }
 
 onMounted(() => {
@@ -70,9 +69,16 @@ const filteredInquiries = computed(() => {
   })
 })
 
-const openDetail = (inquiry) => {
+const openDetail = async (inquiry) => {
+  // 목록 항목으로 사이드바를 즉시 열고 (content 없음)
   selectedInquiry.value = inquiry
   adminMemo.value = inquiry.adminMemo || ''
+  // 상세 API 호출로 content 포함 전체 데이터 로드
+  await inquiryStore.fetchInquiryById(inquiry.id)
+  if (inquiryStore.currentInquiry) {
+    selectedInquiry.value = inquiryStore.currentInquiry
+    adminMemo.value = inquiryStore.currentInquiry.adminMemo || ''
+  }
 }
 
 const closeDetail = () => {
