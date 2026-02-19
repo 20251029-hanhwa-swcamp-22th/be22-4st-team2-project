@@ -59,9 +59,10 @@ services:
       # MariaDB 이미지가 자동으로 생성하고 DB_DATABASE에 GRANT ALL 부여
       - MARIADB_USER=${DB_USERNAME:-salesboost}
       - MARIADB_PASSWORD=${DB_PASSWORD:-salesboost}
-    ports:
-      # DB_HOST_BIND: Mac은 127.0.0.1(기본), Windows에서 외부 접속 필요 시 .env에서 0.0.0.0으로 변경
-      - "${DB_HOST_BIND:-127.0.0.1}:3306:3306"
+    # 호스트 포트 노출 없음: 백엔드는 Docker 내부 네트워크(mariadb:3306)로 접속하므로 불필요
+    # DBeaver 등 외부 DB 클라이언트 접속이 필요한 경우 아래 주석을 해제하세요:
+    # ports:
+    #   - "${DB_HOST_BIND:-127.0.0.1}:3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./infra/docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql
