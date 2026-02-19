@@ -31,7 +31,6 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Clear auth state and redirect to login
       localStorage.removeItem('admin_token')
-      localStorage.removeItem('admin_user')
       if (window.location.pathname.startsWith('/admin') &&
           window.location.pathname !== '/admin/login') {
         window.location.href = '/admin/login'

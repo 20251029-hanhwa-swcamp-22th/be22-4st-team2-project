@@ -88,7 +88,7 @@ INSERT IGNORE INTO
     )
 VALUES (
         'admin',
-        '$2a$10$eACCYoNOHEqXve8aIWT8Nu3PkMXWBaOxJ9aORUYzfywok1LiLAt22',
+        '$2a$10$BeQwlhKlYhekHpFB1MAr..tz6.KbZH/o.1rpe1k/7nEV1FgQ8KvQm',
         'ROLE_ADMIN',
         1
     );
