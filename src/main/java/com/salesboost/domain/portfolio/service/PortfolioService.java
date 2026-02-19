@@ -26,13 +26,17 @@ public class PortfolioService {
     }
 
     public Long createPortfolio(PortfolioCreateRequest request) {
+        String thumbnailUrl = (request.getThumbnailUrl() != null && !request.getThumbnailUrl().trim().isEmpty())
+                ? request.getThumbnailUrl()
+                : null;
         Portfolio portfolio = Portfolio.create(
                 request.getTitle(),
                 request.getDescription(),
                 request.getClientName(),
                 request.getIndustry(),
-                request.getThumbnailUrl()
+                thumbnailUrl
         );
+        portfolio.updateVisibility(request.isVisible());
         Portfolio saved = portfolioRepository.save(portfolio);
         return saved.getId();
     }
@@ -40,9 +44,10 @@ public class PortfolioService {
     public void updatePortfolio(Long id, PortfolioUpdateRequest request) {
         Portfolio portfolio = findPortfolio(id);
 
-        String thumbnailUrl = request.getThumbnailUrl() != null
+        // 빈 문자열을 null로 처리하여 썸네일 URL 삭제 허용
+        String thumbnailUrl = (request.getThumbnailUrl() != null && !request.getThumbnailUrl().trim().isEmpty())
                 ? request.getThumbnailUrl()
-                : portfolio.getThumbnailUrl();
+                : null;
 
         portfolio.update(
                 request.getTitle(),
@@ -51,6 +56,10 @@ public class PortfolioService {
                 request.getIndustry(),
                 thumbnailUrl
         );
+
+        if (request.getVisible() != null) {
+            portfolio.updateVisibility(request.getVisible());
+        }
     }
 
     public void deletePortfolio(Long id) {
@@ -108,7 +117,8 @@ public class PortfolioService {
                 portfolio.isVisible(),
                 portfolio.getDisplayOrder(),
                 portfolio.getImages().stream().map(PortfolioImage::getImageUrl).toList(),
-                portfolio.getCreatedAt()
+                portfolio.getCreatedAt(),
+                portfolio.getUpdatedAt()
         );
     }
 }

@@ -100,7 +100,8 @@ const savePortfolio = async () => {
     clientName: form.clientName,
     industry: form.industry,
     description: form.description,
-    thumbnailUrl: form.thumbnailUrl || null
+    thumbnailUrl: form.thumbnailUrl,
+    visible: form.visible
   }
 
   try {

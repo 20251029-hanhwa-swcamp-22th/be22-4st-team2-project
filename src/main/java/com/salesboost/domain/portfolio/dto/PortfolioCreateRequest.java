@@ -21,4 +21,6 @@ public class PortfolioCreateRequest {
     private String industry;
 
     private String thumbnailUrl;
+
+    private boolean visible = true;
 }

@@ -38,11 +38,10 @@ const isSubmitted = ref(false)
 const submitError = ref('')
 
 const inquiryTypes = [
+  { value: 'GENERAL', label: '일반 문의' },
   { value: 'PARTNERSHIP', label: '제휴 문의' },
-  { value: 'DEMO', label: '데모 요청' },
-  { value: 'PRICING', label: '가격 문의' },
-  { value: 'SUPPORT', label: '기술 지원' },
-  { value: 'OTHER', label: '기타 문의' }
+  { value: 'QUOTE', label: '견적 문의' },
+  { value: 'ETC', label: '기타 문의' }
 ]
 
 const validateForm = () => {

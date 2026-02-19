@@ -21,4 +21,6 @@ public class PortfolioUpdateRequest {
     private String industry;
 
     private String thumbnailUrl;
+
+    private Boolean visible;
 }
