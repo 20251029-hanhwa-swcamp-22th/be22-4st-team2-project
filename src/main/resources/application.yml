@@ -3,7 +3,7 @@ spring:
     # 로컬 개발 기본값. Docker 실행 시 환경변수(SPRING_DATASOURCE_URL)로 자동 오버라이드됨
     url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false}
     username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:mariadb}
     driver-class-name: org.mariadb.jdbc.Driver
   jpa:
     hibernate:
