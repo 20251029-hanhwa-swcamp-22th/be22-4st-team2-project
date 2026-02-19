@@ -1,6 +1,10 @@
 services:
   backend:
-    build: .
+    build:
+      context: .
+      # Mac Apple Silicon(M1/M2/M3) 환경에서 amd64 이미지로 강제 빌드
+      platforms:
+        - linux/amd64
     ports:
       - "8080:8080"
     environment:
@@ -15,11 +19,22 @@ services:
       - salesboost-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      # Mac Apple Silicon(M1/M2/M3) 환경에서 amd64 이미지로 강제 빌드
+      platforms:
+        - linux/amd64
     ports:
       - "80:80"
     depends_on:
       - backend
+    healthcheck:
+      # nginx가 실제로 index.html을 서빙하는지 확인 (빌드 실패로 파일이 없으면 404 감지)
+      test: ["CMD", "wget", "-qO-", "http://localhost/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - salesboost-network
 
@@ -29,6 +44,7 @@ services:
       - MARIADB_DATABASE=salesboost
       - MARIADB_ROOT_PASSWORD=root
     ports:
+      # 127.0.0.1로 바인딩: Mac에서 0.0.0.0 사용 시 네트워크 인터페이스 충돌 방지
       - "127.0.0.1:3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
