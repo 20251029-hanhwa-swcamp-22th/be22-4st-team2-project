@@ -8,10 +8,12 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:mariadb://mariadb:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=root
-      - APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:5173,http://localhost:3000
+      # .env 파일의 값을 참조. 파일이 없으면 :- 뒤의 기본값을 사용
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:mariadb://mariadb:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false}
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-root}
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD:-root}
+      - APP_JWT_SECRET=${APP_JWT_SECRET:-change-this-to-very-long-secret-key-at-least-32bytes}
+      - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:5173,http://localhost:3000}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -41,8 +43,9 @@ services:
   mariadb:
     image: mariadb:10.11
     environment:
-      - MARIADB_DATABASE=salesboost
-      - MARIADB_ROOT_PASSWORD=root
+      # .env 파일의 값을 참조. 파일이 없으면 :- 뒤의 기본값을 사용
+      - MARIADB_DATABASE=${DB_DATABASE:-salesboost}
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-root}
     ports:
       # 127.0.0.1로 바인딩: Mac에서 0.0.0.0 사용 시 네트워크 인터페이스 충돌 방지
       - "127.0.0.1:3306:3306"
