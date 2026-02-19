@@ -3,6 +3,7 @@ services:
     build:
       context: .
       # Mac Apple Silicon(M1/M2/M3) 환경에서 amd64 이미지로 강제 빌드
+      # Windows/Linux amd64에서는 native 빌드와 동일하므로 성능 차이 없음
       platforms:
         - linux/amd64
     ports:
@@ -10,10 +11,17 @@ services:
     environment:
       # .env 파일의 값을 참조. 파일이 없으면 :- 뒤의 기본값을 사용
       - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:mariadb://mariadb:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false}
-      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-root}
-      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD:-root}
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-salesboost}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-salesboost}
       - APP_JWT_SECRET=${APP_JWT_SECRET:-change-this-to-very-long-secret-key-at-least-32bytes}
       - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:5173,http://localhost:3000}
+    healthcheck:
+      # Spring Boot가 정상 기동되어 API 응답 가능한지 확인
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/portfolios > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     depends_on:
       mariadb:
         condition: service_healthy
@@ -28,15 +36,16 @@ services:
         - linux/amd64
     ports:
       - "80:80"
-    depends_on:
-      - backend
     healthcheck:
-      # nginx가 실제로 index.html을 서빙하는지 확인 (빌드 실패로 파일이 없으면 404 감지)
-      test: ["CMD", "wget", "-qO-", "http://localhost/index.html"]
+      # nginx가 실제로 index.html을 서빙하는지 확인 (curl은 nginx:alpine에 추가 설치됨)
+      test: ["CMD-SHELL", "curl -sf http://localhost/index.html > /dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - salesboost-network
 
@@ -45,10 +54,14 @@ services:
     environment:
       # .env 파일의 값을 참조. 파일이 없으면 :- 뒤의 기본값을 사용
       - MARIADB_DATABASE=${DB_DATABASE:-salesboost}
-      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-root}
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-changeme_root}
+      # 전용 애플리케이션 유저 (root 대신 사용)
+      # MariaDB 이미지가 자동으로 생성하고 DB_DATABASE에 GRANT ALL 부여
+      - MARIADB_USER=${DB_USERNAME:-salesboost}
+      - MARIADB_PASSWORD=${DB_PASSWORD:-salesboost}
     ports:
-      # 127.0.0.1로 바인딩: Mac에서 0.0.0.0 사용 시 네트워크 인터페이스 충돌 방지
-      - "127.0.0.1:3306:3306"
+      # DB_HOST_BIND: Mac은 127.0.0.1(기본), Windows에서 외부 접속 필요 시 .env에서 0.0.0.0으로 변경
+      - "${DB_HOST_BIND:-127.0.0.1}:3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./infra/docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql

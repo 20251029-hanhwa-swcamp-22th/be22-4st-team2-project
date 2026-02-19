@@ -19,8 +19,22 @@ spec:
             - containerPort: 3306
           env:
             - name: MARIADB_DATABASE
-              value: salesboost
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DB_DATABASE
             - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: root-password
+            # 전용 앱 유저: 백엔드가 root 대신 이 계정으로 접속
+            - name: MARIADB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DB_USERNAME
+            - name: MARIADB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: db-secret
@@ -28,10 +42,29 @@ spec:
           volumeMounts:
             - name: db-data
               mountPath: /var/lib/mysql
+            # init.sql: Pod 최초 기동 시 테이블 및 샘플 데이터 초기화
+            - name: db-init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect"]
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 3
       volumes:
         - name: db-data
           persistentVolumeClaim:
             claimName: db-pvc
+        - name: db-init-sql
+          configMap:
+            name: db-init-sql
 ---
 apiVersion: v1
 kind: Service

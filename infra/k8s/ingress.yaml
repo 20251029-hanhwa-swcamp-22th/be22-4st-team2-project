@@ -11,6 +11,8 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
+    # ⚠️ 프로덕션 배포 시 실제 도메인으로 변경하세요 (예: host: salesboost.example.com)
+    # 도메인 없이 IP로 접근할 경우 host 줄 전체를 삭제하면 모든 호스트에 대해 라우팅됩니다.
     - host: localhost
       http:
         paths:

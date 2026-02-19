@@ -6,13 +6,10 @@ import com.salesboost.domain.portfolio.dto.*;
 import com.salesboost.domain.portfolio.entity.Portfolio;
 import com.salesboost.domain.portfolio.entity.PortfolioImage;
 import com.salesboost.domain.portfolio.repository.PortfolioRepository;
-import com.salesboost.domain.portfolio.service.storage.FileStorageService;
-import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +17,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class PortfolioService {
 
     private final PortfolioRepository portfolioRepository;
-    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public List<PortfolioResponse> getAdminPortfolios() {
@@ -29,29 +25,24 @@ public class PortfolioService {
                 .toList();
     }
 
-    public Long createPortfolio(PortfolioCreateRequest request, MultipartFile thumbnail, List<MultipartFile> images) {
-        String thumbnailUrl = thumbnail == null || thumbnail.isEmpty() ? null : fileStorageService.store(thumbnail);
-
+    public Long createPortfolio(PortfolioCreateRequest request) {
         Portfolio portfolio = Portfolio.create(
                 request.getTitle(),
                 request.getDescription(),
                 request.getClientName(),
                 request.getIndustry(),
-                thumbnailUrl
+                request.getThumbnailUrl()
         );
-
         Portfolio saved = portfolioRepository.save(portfolio);
-        attachImages(saved, images);
         return saved.getId();
     }
 
-    public void updatePortfolio(Long id, PortfolioUpdateRequest request, MultipartFile thumbnail, List<MultipartFile> images) {
+    public void updatePortfolio(Long id, PortfolioUpdateRequest request) {
         Portfolio portfolio = findPortfolio(id);
 
-        String thumbnailUrl = portfolio.getThumbnailUrl();
-        if (thumbnail != null && !thumbnail.isEmpty()) {
-            thumbnailUrl = fileStorageService.store(thumbnail);
-        }
+        String thumbnailUrl = request.getThumbnailUrl() != null
+                ? request.getThumbnailUrl()
+                : portfolio.getThumbnailUrl();
 
         portfolio.update(
                 request.getTitle(),
@@ -60,11 +51,6 @@ public class PortfolioService {
                 request.getIndustry(),
                 thumbnailUrl
         );
-
-        if (images != null && !images.isEmpty()) {
-            portfolio.clearImages();
-            attachImages(portfolio, images);
-        }
     }
 
     public void deletePortfolio(Long id) {
@@ -104,18 +90,6 @@ public class PortfolioService {
             throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
         }
         return toResponse(portfolio);
-    }
-
-    private void attachImages(Portfolio portfolio, List<MultipartFile> images) {
-        List<MultipartFile> safeImages = images == null ? Collections.emptyList() : images;
-        int order = 1;
-        for (MultipartFile image : safeImages) {
-            if (image == null || image.isEmpty()) {
-                continue;
-            }
-            String imageUrl = fileStorageService.store(image);
-            portfolio.addImage(PortfolioImage.create(portfolio, imageUrl, order++));
-        }
     }
 
     private Portfolio findPortfolio(Long id) {
