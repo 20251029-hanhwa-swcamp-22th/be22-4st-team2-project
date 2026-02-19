@@ -26,18 +26,6 @@ const handleSubmit = async () => {
   isLoading.value = true
   error.value = ''
 
-  // Demo login (for development without backend)
-  if (form.username === 'admin' && form.password === 'admin1234') {
-    // Simulate API response
-    localStorage.setItem('admin_token', 'demo_token_12345')
-    localStorage.setItem('admin_user', JSON.stringify({ username: 'admin', name: '관리자' }))
-
-    const redirectPath = route.query.redirect || '/admin/inquiries'
-    router.push(redirectPath)
-    isLoading.value = false
-    return
-  }
-
   const result = await authStore.login(form)
 
   isLoading.value = false
@@ -140,7 +128,7 @@ const handleSubmit = async () => {
         <!-- Demo Credentials -->
         <div class="mt-6 p-4 bg-gray-50 rounded-lg">
           <p class="text-sm text-gray-600 text-center">
-            <strong>데모 계정:</strong> admin / admin1234
+            <strong>데모 계정:</strong> admin / admin1234!
           </p>
         </div>
       </div>
