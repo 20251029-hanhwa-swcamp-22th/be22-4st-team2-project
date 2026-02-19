@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useInquiryStore } from '@/stores/inquiry'
@@ -31,6 +31,8 @@ const statusFilter = ref('')
 const selectedInquiry = ref(null)
 const adminMemo = ref('')
 const isSavingMemo = ref(false)
+const isDetailLoading = ref(false)
+let searchTimeout = null
 
 const statusOptions = [
   { value: '', label: '전체' },
@@ -47,32 +49,50 @@ const statusLabels = {
 
 const inquiryTypeLabels = {
   PARTNERSHIP: '제휴 문의',
-  DEMO: '데모 요청',
-  PRICING: '가격 문의',
-  SUPPORT: '기술 지원',
-  OTHER: '기타 문의'
+  GENERAL: '일반 문의',
+  QUOTE: '견적 문의',
+  ETC: '기타 문의'
+}
+
+const fetchInquiries = (page = 1) => {
+  inquiryStore.fetchInquiries({
+    status: statusFilter.value || undefined,
+    keyword: searchQuery.value || undefined,
+    page,
+    size: 10
+  })
 }
 
 onMounted(() => {
-  inquiryStore.fetchInquiries()
+  fetchInquiries()
 })
 
-const filteredInquiries = computed(() => {
-  return inquiryStore.inquiries.filter(inquiry => {
-    const matchesSearch = !searchQuery.value ||
-      inquiry.companyName.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      inquiry.contactName.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      inquiry.email.toLowerCase().includes(searchQuery.value.toLowerCase())
-
-    const matchesStatus = !statusFilter.value || inquiry.status === statusFilter.value
-
-    return matchesSearch && matchesStatus
-  })
+watch(statusFilter, () => {
+  fetchInquiries(1)
 })
 
-const openDetail = (inquiry) => {
+watch(searchQuery, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    fetchInquiries(1)
+  }, 300)
+})
+
+const goToPage = (page) => {
+  if (page < 1 || page > inquiryStore.pagination.totalPages) return
+  fetchInquiries(page)
+}
+
+const openDetail = async (inquiry) => {
   selectedInquiry.value = inquiry
-  adminMemo.value = inquiry.adminMemo || ''
+  adminMemo.value = ''
+  isDetailLoading.value = true
+  await inquiryStore.fetchInquiryById(inquiry.id)
+  isDetailLoading.value = false
+  if (inquiryStore.currentInquiry) {
+    selectedInquiry.value = inquiryStore.currentInquiry
+    adminMemo.value = inquiryStore.currentInquiry.adminMemo || ''
+  }
 }
 
 const closeDetail = () => {
@@ -218,7 +238,7 @@ const logout = () => {
             </thead>
             <tbody class="divide-y divide-gray-200">
               <tr
-                v-for="inquiry in filteredInquiries"
+                v-for="inquiry in inquiryStore.inquiries"
                 :key="inquiry.id"
                 class="hover:bg-gray-50 cursor-pointer transition-colors"
                 @click="openDetail(inquiry)"
@@ -255,7 +275,7 @@ const logout = () => {
                   {{ formatDate(inquiry.createdAt) }}
                 </td>
               </tr>
-              <tr v-if="filteredInquiries.length === 0">
+              <tr v-if="inquiryStore.inquiries.length === 0 && !inquiryStore.loading">
                 <td colspan="5" class="px-6 py-12 text-center text-gray-500">
                   조회된 문의가 없습니다.
                 </td>
@@ -267,19 +287,24 @@ const logout = () => {
         <!-- Pagination -->
         <div class="bg-gray-50 px-6 py-3 flex items-center justify-between border-t">
           <div class="text-sm text-gray-500">
-            총 {{ filteredInquiries.length }}건
+            총 {{ inquiryStore.pagination.total }}건
           </div>
           <div class="flex items-center space-x-2">
             <button
+              @click="goToPage(inquiryStore.pagination.page - 1)"
+              :disabled="inquiryStore.pagination.page <= 1 || inquiryStore.loading"
               class="p-2 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              disabled
             >
               <ChevronLeft class="w-5 h-5" />
             </button>
-            <span class="px-3 py-1 bg-primary-600 text-white rounded-lg text-sm">1</span>
+            <span class="px-3 py-1 bg-primary-600 text-white rounded-lg text-sm">
+              {{ inquiryStore.pagination.page }}
+            </span>
+            <span class="text-sm text-gray-500">/ {{ inquiryStore.pagination.totalPages || 1 }}</span>
             <button
+              @click="goToPage(inquiryStore.pagination.page + 1)"
+              :disabled="inquiryStore.pagination.page >= inquiryStore.pagination.totalPages || inquiryStore.loading"
               class="p-2 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              disabled
             >
               <ChevronRight class="w-5 h-5" />
             </button>
@@ -323,8 +348,13 @@ const logout = () => {
                 </button>
               </div>
 
+              <!-- Loading -->
+              <div v-if="isDetailLoading" class="flex-1 flex items-center justify-center">
+                <Loader2 class="w-8 h-8 animate-spin text-primary-600" />
+              </div>
+
               <!-- Content -->
-              <div class="flex-1 overflow-y-auto p-6 space-y-6">
+              <div v-else class="flex-1 overflow-y-auto p-6 space-y-6">
                 <!-- Status -->
                 <div>
                   <label class="text-sm font-medium text-gray-700 mb-2 block">처리 상태</label>

@@ -23,6 +23,9 @@ RUN test -d /app/dist && test -f /app/dist/index.html \
 # Production stage
 FROM --platform=linux/amd64 nginx:alpine
 
+# curl 설치: healthcheck에서 사용 (nginx:alpine에는 기본 미포함)
+RUN apk add --no-cache curl
+
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 

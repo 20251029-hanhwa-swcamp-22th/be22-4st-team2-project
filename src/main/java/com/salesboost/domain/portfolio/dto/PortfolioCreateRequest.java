@@ -19,4 +19,8 @@ public class PortfolioCreateRequest {
 
     @NotBlank(message = "industry는 필수입니다.")
     private String industry;
+
+    private String thumbnailUrl;
+
+    private boolean visible = true;
 }

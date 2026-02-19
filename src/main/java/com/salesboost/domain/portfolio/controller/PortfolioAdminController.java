@@ -7,7 +7,6 @@ import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/admin/portfolios")
@@ -22,22 +21,16 @@ public class PortfolioAdminController {
     }
 
     @PostMapping
-    public ApiResponse<Long> createPortfolio(
-            @Valid @RequestPart("data") PortfolioCreateRequest request,
-            @RequestPart(value = "thumbnail", required = false) MultipartFile thumbnail,
-            @RequestPart(value = "images", required = false) List<MultipartFile> images
-    ) {
-        return ApiResponse.ok("포트폴리오가 등록되었습니다.", portfolioService.createPortfolio(request, thumbnail, images));
+    public ApiResponse<Long> createPortfolio(@Valid @RequestBody PortfolioCreateRequest request) {
+        return ApiResponse.ok("포트폴리오가 등록되었습니다.", portfolioService.createPortfolio(request));
     }
 
     @PutMapping("/{id}")
     public ApiResponse<Void> updatePortfolio(
             @PathVariable Long id,
-            @Valid @RequestPart("data") PortfolioUpdateRequest request,
-            @RequestPart(value = "thumbnail", required = false) MultipartFile thumbnail,
-            @RequestPart(value = "images", required = false) List<MultipartFile> images
+            @Valid @RequestBody PortfolioUpdateRequest request
     ) {
-        portfolioService.updatePortfolio(id, request, thumbnail, images);
+        portfolioService.updatePortfolio(id, request);
         return ApiResponse.ok("포트폴리오가 수정되었습니다.", null);
     }
 

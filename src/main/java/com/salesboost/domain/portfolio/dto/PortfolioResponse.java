@@ -18,4 +18,5 @@ public class PortfolioResponse {
     private int displayOrder;
     private List<String> imageUrls;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

@@ -125,12 +125,6 @@ const handleSubmit = async () => {
           </button>
         </form>
 
-        <!-- Demo Credentials -->
-        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p class="text-sm text-gray-600 text-center">
-            <strong>데모 계정:</strong> admin / admin1234!
-          </p>
-        </div>
       </div>
 
       <!-- Back to Home -->

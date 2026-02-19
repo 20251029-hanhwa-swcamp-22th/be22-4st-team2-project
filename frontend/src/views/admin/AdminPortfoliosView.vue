@@ -3,6 +3,7 @@ import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePortfolioStore } from '@/stores/portfolio'
+import api from '@/services/api'
 import {
   Plus,
   Edit2,
@@ -16,7 +17,7 @@ import {
   Save,
   Loader2,
   Image,
-  GripVertical
+  AlertCircle
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -28,16 +29,16 @@ const modalMode = ref('create') // 'create' | 'edit'
 const isSaving = ref(false)
 const isDeleting = ref(false)
 const deleteConfirmId = ref(null)
+const saveError = ref('')
 
 const form = reactive({
   id: null,
   title: '',
-  client: '',
+  clientName: '',
   industry: '',
   description: '',
-  thumbnail: '',
-  features: '',
-  isVisible: true
+  thumbnailUrl: '',
+  visible: true
 })
 
 const industries = [
@@ -52,12 +53,13 @@ const industries = [
 ]
 
 onMounted(() => {
-  portfolioStore.fetchPortfolios()
+  portfolioStore.fetchAdminPortfolios()
 })
 
 const openCreateModal = () => {
   modalMode.value = 'create'
   resetForm()
+  saveError.value = ''
   showModal.value = true
 }
 
@@ -65,12 +67,12 @@ const openEditModal = (portfolio) => {
   modalMode.value = 'edit'
   form.id = portfolio.id
   form.title = portfolio.title
-  form.client = portfolio.client
+  form.clientName = portfolio.clientName
   form.industry = portfolio.industry
   form.description = portfolio.description
-  form.thumbnail = portfolio.thumbnail
-  form.features = portfolio.features.join(', ')
-  form.isVisible = portfolio.isVisible !== false
+  form.thumbnailUrl = portfolio.thumbnailUrl || ''
+  form.visible = portfolio.visible
+  saveError.value = ''
   showModal.value = true
 }
 
@@ -82,44 +84,39 @@ const closeModal = () => {
 const resetForm = () => {
   form.id = null
   form.title = ''
-  form.client = ''
+  form.clientName = ''
   form.industry = ''
   form.description = ''
-  form.thumbnail = ''
-  form.features = ''
-  form.isVisible = true
+  form.thumbnailUrl = ''
+  form.visible = true
 }
 
 const savePortfolio = async () => {
   isSaving.value = true
+  saveError.value = ''
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  const portfolioData = {
-    id: form.id || Date.now(),
+  const payload = {
     title: form.title,
-    client: form.client,
+    clientName: form.clientName,
     industry: form.industry,
     description: form.description,
-    thumbnail: form.thumbnail || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400',
-    features: form.features.split(',').map(f => f.trim()).filter(f => f),
-    images: [form.thumbnail || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800'],
-    isVisible: form.isVisible,
-    createdAt: new Date().toISOString().split('T')[0]
+    thumbnailUrl: form.thumbnailUrl,
+    visible: form.visible
   }
 
-  if (modalMode.value === 'create') {
-    portfolioStore.portfolios.unshift(portfolioData)
-  } else {
-    const index = portfolioStore.portfolios.findIndex(p => p.id === form.id)
-    if (index !== -1) {
-      portfolioStore.portfolios[index] = portfolioData
+  try {
+    if (modalMode.value === 'create') {
+      await api.post('/api/admin/portfolios', payload)
+    } else {
+      await api.put(`/api/admin/portfolios/${form.id}`, payload)
     }
+    await portfolioStore.fetchAdminPortfolios()
+    closeModal()
+  } catch (err) {
+    saveError.value = err.response?.data?.message || '저장 중 오류가 발생했습니다.'
+  } finally {
+    isSaving.value = false
   }
-
-  isSaving.value = false
-  closeModal()
 }
 
 const confirmDelete = (id) => {
@@ -132,19 +129,24 @@ const cancelDelete = () => {
 
 const deletePortfolio = async (id) => {
   isDeleting.value = true
-
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 500))
-
-  portfolioStore.portfolios = portfolioStore.portfolios.filter(p => p.id !== id)
-
-  isDeleting.value = false
-  deleteConfirmId.value = null
+  try {
+    await api.delete(`/api/admin/portfolios/${id}`)
+    await portfolioStore.fetchAdminPortfolios()
+  } catch (err) {
+    alert('삭제 중 오류가 발생했습니다.')
+  } finally {
+    isDeleting.value = false
+    deleteConfirmId.value = null
+  }
 }
 
 const toggleVisibility = async (portfolio) => {
-  portfolio.isVisible = !portfolio.isVisible
-  // In real app, call API to update visibility
+  try {
+    await api.patch(`/api/admin/portfolios/${portfolio.id}/visibility`, { visible: !portfolio.visible })
+    await portfolioStore.fetchAdminPortfolios()
+  } catch (err) {
+    alert('노출 상태 변경 중 오류가 발생했습니다.')
+  }
 }
 
 const logout = () => {
@@ -214,27 +216,36 @@ const logout = () => {
         </button>
       </div>
 
+      <!-- Loading -->
+      <div v-if="portfolioStore.loading" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div v-for="i in 6" :key="i" class="animate-pulse bg-white rounded-xl h-64"></div>
+      </div>
+
       <!-- Portfolio Grid -->
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div v-else class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div
           v-for="portfolio in portfolioStore.portfolios"
           :key="portfolio.id"
           class="bg-white rounded-xl shadow-sm overflow-hidden"
-          :class="{ 'opacity-60': portfolio.isVisible === false }"
+          :class="{ 'opacity-60': !portfolio.visible }"
         >
           <!-- Thumbnail -->
-          <div class="relative h-40">
+          <div class="relative h-40 bg-gray-100">
             <img
-              :src="portfolio.thumbnail"
+              v-if="portfolio.thumbnailUrl"
+              :src="portfolio.thumbnailUrl"
               :alt="portfolio.title"
               class="w-full h-full object-cover"
             />
-            <div class="absolute top-2 right-2 flex space-x-1">
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <Image class="w-10 h-10 text-gray-300" />
+            </div>
+            <div class="absolute top-2 right-2">
               <span
                 class="px-2 py-1 rounded text-xs font-medium"
-                :class="portfolio.isVisible !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+                :class="portfolio.visible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
               >
-                {{ portfolio.isVisible !== false ? '노출' : '숨김' }}
+                {{ portfolio.visible ? '노출' : '숨김' }}
               </span>
             </div>
           </div>
@@ -247,16 +258,17 @@ const logout = () => {
               </span>
             </div>
             <h3 class="font-semibold text-gray-900 mb-1">{{ portfolio.title }}</h3>
-            <p class="text-sm text-gray-500 mb-4 line-clamp-2">{{ portfolio.description }}</p>
+            <p class="text-sm text-gray-500 mb-1">{{ portfolio.clientName }}</p>
+            <p class="text-sm text-gray-400 mb-4 line-clamp-2">{{ portfolio.description }}</p>
 
             <!-- Actions -->
             <div class="flex items-center justify-between pt-3 border-t">
               <button
                 @click="toggleVisibility(portfolio)"
                 class="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                :title="portfolio.isVisible !== false ? '숨기기' : '노출하기'"
+                :title="portfolio.visible ? '숨기기' : '노출하기'"
               >
-                <Eye v-if="portfolio.isVisible !== false" class="w-4 h-4 text-gray-500" />
+                <Eye v-if="portfolio.visible" class="w-4 h-4 text-gray-500" />
                 <EyeOff v-else class="w-4 h-4 text-gray-500" />
               </button>
               <div class="flex items-center space-x-1">
@@ -275,10 +287,7 @@ const logout = () => {
                 >
                   <Trash2 class="w-4 h-4 text-red-500" />
                 </button>
-                <div
-                  v-else
-                  class="flex items-center space-x-1"
-                >
+                <div v-else class="flex items-center space-x-1">
                   <button
                     @click="deletePortfolio(portfolio.id)"
                     :disabled="isDeleting"
@@ -308,10 +317,7 @@ const logout = () => {
           </div>
           <h3 class="text-lg font-medium text-gray-900 mb-2">포트폴리오가 없습니다</h3>
           <p class="text-gray-500 mb-4">새 포트폴리오를 등록해보세요.</p>
-          <button
-            @click="openCreateModal"
-            class="btn-primary"
-          >
+          <button @click="openCreateModal" class="btn-primary">
             <Plus class="w-5 h-5 mr-2" />
             새 포트폴리오
           </button>
@@ -333,123 +339,71 @@ const logout = () => {
           v-if="showModal"
           class="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-          <!-- Backdrop -->
-          <div
-            class="absolute inset-0 bg-black/50"
-            @click="closeModal"
-          ></div>
+          <div class="absolute inset-0 bg-black/50" @click="closeModal"></div>
 
-          <!-- Modal -->
           <div class="relative bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden">
-            <!-- Header -->
             <div class="flex items-center justify-between p-6 border-b">
               <h2 class="text-lg font-semibold text-gray-900">
                 {{ modalMode === 'create' ? '새 포트폴리오' : '포트폴리오 수정' }}
               </h2>
-              <button
-                @click="closeModal"
-                class="p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
-                aria-label="닫기"
-              >
+              <button @click="closeModal" class="p-2 hover:bg-gray-100 rounded-lg cursor-pointer" aria-label="닫기">
                 <X class="w-5 h-5" />
               </button>
             </div>
 
-            <!-- Form -->
             <form @submit.prevent="savePortfolio" class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
+              <div v-if="saveError" class="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start">
+                <AlertCircle class="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                <span class="text-red-700 text-sm">{{ saveError }}</span>
+              </div>
+
               <div>
                 <label class="label-text">제목 <span class="text-red-500">*</span></label>
-                <input
-                  v-model="form.title"
-                  type="text"
-                  class="input-field"
-                  placeholder="포트폴리오 제목"
-                  required
-                />
+                <input v-model="form.title" type="text" class="input-field" placeholder="포트폴리오 제목" required />
               </div>
 
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <label class="label-text">고객사 <span class="text-red-500">*</span></label>
-                  <input
-                    v-model="form.client"
-                    type="text"
-                    class="input-field"
-                    placeholder="ABC Company"
-                    required
-                  />
+                  <input v-model="form.clientName" type="text" class="input-field" placeholder="ABC Company" required />
                 </div>
                 <div>
                   <label class="label-text">업종 <span class="text-red-500">*</span></label>
-                  <select
-                    v-model="form.industry"
-                    class="input-field"
-                    required
-                  >
+                  <select v-model="form.industry" class="input-field" required>
                     <option value="" disabled>선택</option>
-                    <option v-for="ind in industries" :key="ind" :value="ind">
-                      {{ ind }}
-                    </option>
+                    <option v-for="ind in industries" :key="ind" :value="ind">{{ ind }}</option>
                   </select>
                 </div>
               </div>
 
               <div>
                 <label class="label-text">설명 <span class="text-red-500">*</span></label>
-                <textarea
-                  v-model="form.description"
-                  rows="3"
-                  class="input-field resize-none"
-                  placeholder="프로젝트 설명..."
-                  required
-                ></textarea>
+                <textarea v-model="form.description" rows="3" class="input-field resize-none" placeholder="프로젝트 설명..." required></textarea>
               </div>
 
               <div>
                 <label class="label-text">썸네일 URL</label>
-                <input
-                  v-model="form.thumbnail"
-                  type="url"
-                  class="input-field"
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
-
-              <div>
-                <label class="label-text">적용 기능 (쉼표로 구분)</label>
-                <input
-                  v-model="form.features"
-                  type="text"
-                  class="input-field"
-                  placeholder="PI 자동 생성, PO 접수 관리, 출하현황 대시보드"
-                />
+                <input v-model="form.thumbnailUrl" type="url" class="input-field" placeholder="https://example.com/image.jpg" />
               </div>
 
               <div class="flex items-center">
                 <input
-                  id="isVisible"
-                  v-model="form.isVisible"
+                  id="visible"
+                  v-model="form.visible"
                   type="checkbox"
                   class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
-                <label for="isVisible" class="ml-2 text-sm text-gray-700">
-                  사이트에 노출
-                </label>
+                <label for="visible" class="ml-2 text-sm text-gray-700">사이트에 노출</label>
               </div>
             </form>
 
-            <!-- Footer -->
             <div class="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
-              <button
-                type="button"
-                @click="closeModal"
-                class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
-              >
+              <button type="button" @click="closeModal" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer">
                 취소
               </button>
               <button
                 @click="savePortfolio"
-                :disabled="isSaving || !form.title || !form.client || !form.industry || !form.description"
+                :disabled="isSaving || !form.title || !form.clientName || !form.industry || !form.description"
                 class="btn-primary"
               >
                 <Loader2 v-if="isSaving" class="w-4 h-4 mr-2 animate-spin" />

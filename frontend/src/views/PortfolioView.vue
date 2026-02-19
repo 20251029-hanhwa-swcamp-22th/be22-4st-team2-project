@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { usePortfolioStore } from '@/stores/portfolio'
-import { X, ExternalLink, Building2, Tag, Calendar, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { X, Building2, Tag, Calendar, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 const portfolioStore = usePortfolioStore()
 
@@ -24,7 +24,7 @@ const closeModal = () => {
 }
 
 const nextImage = () => {
-  if (selectedPortfolio.value && currentImageIndex.value < selectedPortfolio.value.images.length - 1) {
+  if (selectedPortfolio.value && currentImageIndex.value < selectedPortfolio.value.imageUrls.length - 1) {
     currentImageIndex.value++
   }
 }
@@ -80,9 +80,10 @@ const prevImage = () => {
             @click="openModal(portfolio)"
           >
             <!-- Thumbnail -->
-            <div class="relative h-48 overflow-hidden">
+            <div class="relative h-48 overflow-hidden bg-gray-100">
               <img
-                :src="portfolio.thumbnail"
+                v-if="portfolio.thumbnailUrl"
+                :src="portfolio.thumbnailUrl"
                 :alt="portfolio.title"
                 class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
               />
@@ -105,17 +106,10 @@ const prevImage = () => {
               <p class="text-gray-600 text-sm line-clamp-2">
                 {{ portfolio.description }}
               </p>
-
-              <!-- Features -->
-              <div class="flex flex-wrap gap-2 mt-4">
-                <span
-                  v-for="feature in portfolio.features.slice(0, 3)"
-                  :key="feature"
-                  class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"
-                >
-                  {{ feature }}
-                </span>
-              </div>
+              <p class="text-gray-500 text-xs mt-3">
+                <Building2 class="w-3 h-3 inline mr-1" />
+                {{ portfolio.clientName }}
+              </p>
             </div>
           </div>
         </div>
@@ -169,14 +163,18 @@ const prevImage = () => {
               <!-- Image Gallery -->
               <div class="relative bg-gray-900 h-64 lg:h-auto">
                 <img
-                  :src="selectedPortfolio.images[currentImageIndex]"
+                  v-if="selectedPortfolio.imageUrls && selectedPortfolio.imageUrls.length > 0"
+                  :src="selectedPortfolio.imageUrls[currentImageIndex]"
                   :alt="selectedPortfolio.title"
                   class="w-full h-full object-cover"
                 />
+                <div v-else-if="selectedPortfolio.thumbnailUrl" class="w-full h-full">
+                  <img :src="selectedPortfolio.thumbnailUrl" :alt="selectedPortfolio.title" class="w-full h-full object-cover" />
+                </div>
 
                 <!-- Image Navigation -->
                 <div
-                  v-if="selectedPortfolio.images.length > 1"
+                  v-if="selectedPortfolio.imageUrls && selectedPortfolio.imageUrls.length > 1"
                   class="absolute inset-x-0 bottom-4 flex items-center justify-center space-x-2"
                 >
                   <button
@@ -188,11 +186,11 @@ const prevImage = () => {
                     <ChevronLeft class="w-4 h-4" />
                   </button>
                   <span class="px-3 py-1 bg-white/90 rounded-full text-sm">
-                    {{ currentImageIndex + 1 }} / {{ selectedPortfolio.images.length }}
+                    {{ currentImageIndex + 1 }} / {{ selectedPortfolio.imageUrls.length }}
                   </span>
                   <button
                     @click.stop="nextImage"
-                    :disabled="currentImageIndex === selectedPortfolio.images.length - 1"
+                    :disabled="currentImageIndex === selectedPortfolio.imageUrls.length - 1"
                     class="p-2 bg-white/90 rounded-full hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     aria-label="다음 이미지"
                   >
@@ -216,28 +214,15 @@ const prevImage = () => {
 
                 <div class="flex items-center text-gray-500 text-sm mb-6">
                   <Building2 class="w-4 h-4 mr-1" />
-                  {{ selectedPortfolio.client }}
+                  {{ selectedPortfolio.clientName }}
                   <span class="mx-2">·</span>
                   <Calendar class="w-4 h-4 mr-1" />
-                  {{ selectedPortfolio.createdAt }}
+                  {{ selectedPortfolio.createdAt ? new Date(selectedPortfolio.createdAt).toLocaleDateString('ko-KR') : '' }}
                 </div>
 
-                <p class="text-gray-600 mb-6">
+                <p class="text-gray-600">
                   {{ selectedPortfolio.description }}
                 </p>
-
-                <div class="border-t pt-6">
-                  <h3 class="text-sm font-semibold text-gray-900 mb-3">적용 기능</h3>
-                  <div class="flex flex-wrap gap-2">
-                    <span
-                      v-for="feature in selectedPortfolio.features"
-                      :key="feature"
-                      class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm"
-                    >
-                      {{ feature }}
-                    </span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

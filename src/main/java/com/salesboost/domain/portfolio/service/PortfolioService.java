@@ -6,13 +6,10 @@ import com.salesboost.domain.portfolio.dto.*;
 import com.salesboost.domain.portfolio.entity.Portfolio;
 import com.salesboost.domain.portfolio.entity.PortfolioImage;
 import com.salesboost.domain.portfolio.repository.PortfolioRepository;
-import com.salesboost.domain.portfolio.service.storage.FileStorageService;
-import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +17,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class PortfolioService {
 
     private final PortfolioRepository portfolioRepository;
-    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public List<PortfolioResponse> getAdminPortfolios() {
@@ -29,9 +25,10 @@ public class PortfolioService {
                 .toList();
     }
 
-    public Long createPortfolio(PortfolioCreateRequest request, MultipartFile thumbnail, List<MultipartFile> images) {
-        String thumbnailUrl = thumbnail == null || thumbnail.isEmpty() ? null : fileStorageService.store(thumbnail);
-
+    public Long createPortfolio(PortfolioCreateRequest request) {
+        String thumbnailUrl = (request.getThumbnailUrl() != null && !request.getThumbnailUrl().trim().isEmpty())
+                ? request.getThumbnailUrl()
+                : null;
         Portfolio portfolio = Portfolio.create(
                 request.getTitle(),
                 request.getDescription(),
@@ -39,19 +36,18 @@ public class PortfolioService {
                 request.getIndustry(),
                 thumbnailUrl
         );
-
+        portfolio.updateVisibility(request.isVisible());
         Portfolio saved = portfolioRepository.save(portfolio);
-        attachImages(saved, images);
         return saved.getId();
     }
 
-    public void updatePortfolio(Long id, PortfolioUpdateRequest request, MultipartFile thumbnail, List<MultipartFile> images) {
+    public void updatePortfolio(Long id, PortfolioUpdateRequest request) {
         Portfolio portfolio = findPortfolio(id);
 
-        String thumbnailUrl = portfolio.getThumbnailUrl();
-        if (thumbnail != null && !thumbnail.isEmpty()) {
-            thumbnailUrl = fileStorageService.store(thumbnail);
-        }
+        // 빈 문자열을 null로 처리하여 썸네일 URL 삭제 허용
+        String thumbnailUrl = (request.getThumbnailUrl() != null && !request.getThumbnailUrl().trim().isEmpty())
+                ? request.getThumbnailUrl()
+                : null;
 
         portfolio.update(
                 request.getTitle(),
@@ -61,9 +57,8 @@ public class PortfolioService {
                 thumbnailUrl
         );
 
-        if (images != null && !images.isEmpty()) {
-            portfolio.clearImages();
-            attachImages(portfolio, images);
+        if (request.getVisible() != null) {
+            portfolio.updateVisibility(request.getVisible());
         }
     }
 
@@ -106,18 +101,6 @@ public class PortfolioService {
         return toResponse(portfolio);
     }
 
-    private void attachImages(Portfolio portfolio, List<MultipartFile> images) {
-        List<MultipartFile> safeImages = images == null ? Collections.emptyList() : images;
-        int order = 1;
-        for (MultipartFile image : safeImages) {
-            if (image == null || image.isEmpty()) {
-                continue;
-            }
-            String imageUrl = fileStorageService.store(image);
-            portfolio.addImage(PortfolioImage.create(portfolio, imageUrl, order++));
-        }
-    }
-
     private Portfolio findPortfolio(Long id) {
         return portfolioRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND));
@@ -134,7 +117,8 @@ public class PortfolioService {
                 portfolio.isVisible(),
                 portfolio.getDisplayOrder(),
                 portfolio.getImages().stream().map(PortfolioImage::getImageUrl).toList(),
-                portfolio.getCreatedAt()
+                portfolio.getCreatedAt(),
+                portfolio.getUpdatedAt()
         );
     }
 }

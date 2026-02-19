@@ -187,7 +187,6 @@ be22-4st-team2-project/
 │  │  │  │     ├─ entity/
 │  │  │  │     ├─ repository/
 │  │  │  │     └─ service/
-│  │  │  │        └─ storage/  # 파일 업로드
 │  │  │  └─ security/          # Spring Security + JWT
 │  │  │     ├─ SecurityConfig.java
 │  │  │     ├─ auth/
@@ -281,41 +280,67 @@ be22-4st-team2-project/
 
 ### 8.1 사전 요구사항
 
-- Java 21+
-- Node.js 20+
-- MariaDB 10.11+ (또는 Docker)
+- Docker Desktop (권장) — Backend, Frontend, DB 모두 컨테이너로 실행
+- 또는: Java 21+, Node.js 20+, MariaDB 10.11+ (개별 실행 시)
 
 ### 8.2 Docker Compose로 전체 실행 (권장)
 
 **① 환경변수 파일 생성** (최초 1회)
 
 ```bash
-# .env.example을 복사해서 .env 파일을 만듭니다
+# macOS / Linux
 cp .env.example .env
+
+# Windows
+copy .env.example .env
 ```
 
-> `.env` 파일을 열어 비밀번호, JWT 시크릿 등 민감한 값을 실제 환경에 맞게 수정하세요.  
-> `.env` 파일이 없어도 `docker-compose.yml`의 기본값으로 동작하므로, 빠른 테스트 시에는 생략 가능합니다.
+**② `.env` 파일 수정** (선택 — 기본값으로도 동작)
 
-**② 전체 빌드 & 실행**
+`.env` 파일을 열면 아래와 같은 내용이 있습니다. 빠른 테스트라면 수정 없이 그대로 사용해도 됩니다.
+프로덕션 배포 시에는 반드시 강력한 비밀번호와 JWT 시크릿으로 변경하세요.
+
+```dotenv
+DB_ROOT_PASSWORD=changeme_root   # MariaDB root 비밀번호 (관리용)
+DB_USERNAME=salesboost           # 앱 전용 DB 유저 이름
+DB_PASSWORD=salesboost           # 앱 전용 DB 유저 비밀번호
+APP_JWT_SECRET=change-this-to-very-long-secret-key-at-least-32bytes
+APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:80
+```
+
+> **Windows에서 MariaDB 포트 접근이 안 될 때**: `.env`에 `DB_HOST_BIND=0.0.0.0` 추가
+> (기본값은 `127.0.0.1` — Mac/Linux 환경에 맞는 안전한 기본값입니다)
+
+**③ 전체 빌드 & 실행**
 
 ```bash
 docker compose up --build
 ```
 
-| 서비스 | 포트 | 설명 |
-|--------|------|------|
-| Frontend (Nginx) | `80` | Vue.js 빌드 + Nginx 서빙 |
-| Backend | `8080` | Spring Boot API 서버 |
-| MariaDB | `3306` | 데이터베이스 |
+처음 실행 시 이미지 빌드에 수 분이 소요됩니다. 완료 후 브라우저에서 확인하세요.
 
-### 8.3 개별 실행
+| 서비스 | 주소 | 설명 |
+|--------|------|------|
+| 웹사이트 (Frontend) | <http://localhost> | Vue.js SPA + Nginx 서빙 |
+| 관리자 페이지 | <http://localhost/admin/login> | 로그인: `admin` / `admin1234!` |
+| Backend API | <http://localhost:8080> | Spring Boot (직접 접근 불필요) |
+| Swagger UI | <http://localhost:8080/swagger-ui.html> | API 문서 |
+
+> **데이터 초기화**: `docker compose down -v && docker compose up --build`
+> (`-v` 옵션으로 DB 볼륨을 제거하면 init.sql이 다시 실행되어 샘플 데이터가 초기 삽입됩니다)
+
+### 8.3 개별 실행 (Docker 없이)
+
+**MariaDB**: Docker 또는 로컬 MariaDB 설치 후 `infra/docker/mariadb/init.sql` 실행
 
 **Backend:**
 ```bash
-# .env 파일의 환경변수를 로드하거나, 아래 변수를 직접 설정한 후 실행
-# export SPRING_DATASOURCE_PASSWORD=your_password
+# DB가 실행 중인 상태에서:
+export SPRING_DATASOURCE_URL=jdbc:mariadb://localhost:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false
+export SPRING_DATASOURCE_USERNAME=salesboost
+export SPRING_DATASOURCE_PASSWORD=salesboost
 ./gradlew bootRun
+# → http://localhost:8080
 ```
 
 **Frontend:**
@@ -323,7 +348,7 @@ docker compose up --build
 cd frontend
 npm install
 npm run dev
-# → http://localhost:5173
+# → http://localhost:5173 (백엔드 http://localhost:8080으로 프록시됨)
 ```
 
 ### 8.4 테스트
@@ -357,13 +382,15 @@ npm run dev
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `DB_DATABASE` | `salesboost` | MariaDB 데이터베이스 이름 |
-| `DB_USERNAME` | `root` | MariaDB 접속 사용자 이름 |
-| `DB_ROOT_PASSWORD` | `root` | MariaDB root 비밀번호 ⚠️ 프로덕션에서 반드시 변경 |
-| `SPRING_DATASOURCE_URL` | `jdbc:mariadb://mariadb:3306/salesboost?...` | Spring Boot DB 접속 URL |
-| `SPRING_DATASOURCE_USERNAME` | `${DB_USERNAME}` | Spring Boot DB 접속 사용자 |
-| `SPRING_DATASOURCE_PASSWORD` | `${DB_ROOT_PASSWORD}` | Spring Boot DB 비밀번호 |
-| `APP_JWT_SECRET` | (개발용 기본값) | JWT 서명 시크릿 ⚠️ 32바이트 이상, 프로덕션에서 반드시 변경 |
-| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost,...` | CORS 허용 오리진 (쉼표 구분) |
+| `DB_ROOT_PASSWORD` | `changeme_root` | MariaDB **root** 비밀번호 (관리용) ⚠️ 프로덕션에서 반드시 변경 |
+| `DB_USERNAME` | `salesboost` | 앱 전용 DB 유저 이름 (root 대신 사용) |
+| `DB_PASSWORD` | `salesboost` | 앱 전용 DB 유저 비밀번호 ⚠️ 프로덕션에서 반드시 변경 |
+| `DB_HOST_BIND` | `127.0.0.1` | MariaDB 포트 바인딩 IP. Windows에서 접근 안 될 때 `0.0.0.0`으로 변경 |
+| `APP_JWT_SECRET` | `change-this-...` | JWT 서명 시크릿 ⚠️ 32바이트 이상, 프로덕션에서 반드시 변경 |
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost,http://localhost:80` | CORS 허용 오리진 (쉼표 구분) |
+
+> `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` 는 `docker-compose.yml`이
+> `DB_USERNAME` / `DB_PASSWORD` 값을 읽어 Spring Boot에 자동으로 주입하므로 `.env`에 별도 설정 불필요합니다.
 
 ### 9.3 설정 우선순위
 
@@ -374,9 +401,10 @@ npm run dev
 [낮음] src/main/resources/application.yml 의 ${SPRING_*:fallback} 기본값
 ```
 
-> 💡 **팀 온보딩 가이드**  
-> 1. `cp .env.example .env` 실행  
-> 2. `.env` 파일에서 `DB_ROOT_PASSWORD`, `APP_JWT_SECRET` 값을 강력한 값으로 변경  
+> 💡 **팀 온보딩 가이드**
+>
+> 1. `cp .env.example .env` (Windows: `copy .env.example .env`) 실행
+> 2. `.env` 파일에서 `DB_ROOT_PASSWORD`, `DB_PASSWORD`, `APP_JWT_SECRET` 값을 강력한 값으로 변경
 > 3. `.env` 파일을 절대 Git에 커밋하지 마세요 (`.gitignore`에 등록됨)
 
 ---
@@ -403,7 +431,7 @@ npm run dev
 - ✅ Spring Security 설정 (BCrypt, CORS)
 - ✅ MyBatis 동적 쿼리 (검색/필터링/페이징)
 - ✅ 유효성 검증 + 글로벌 예외 처리
-- ✅ 파일 업로드 (포트폴리오 이미지)
+- ✅ URL 기반 썸네일 관리 (포트폴리오 이미지)
 
 **프론트엔드:**
 - ✅ 랜딩 페이지 (`HomeView`)
