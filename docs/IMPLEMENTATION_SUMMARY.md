@@ -193,8 +193,8 @@ app:
 ## 📄 문서
 
 - 상세 API 문서: `docs/API_IMPLEMENTATION.md`
-- 프로젝트 기획서: `docs/PROJECT_PLAN.md`
-- ERD: `docs/ERD.md`
+- 프로젝트 기획서: `docs/01_프로젝트_기획서.docx`
+- ERD: `docs/SalesBoost_ERD.mermaid`
 
 ---
 
