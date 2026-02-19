@@ -16,7 +16,7 @@ Public 화면(서비스 소개/포트폴리오/제휴문의)과 Admin 화면(로
 
 | 구분 | 기술 |
 |------|------|
-| **Backend** | Java 17, Spring Boot 3.5.10, Spring Security, JPA, MyBatis |
+| **Backend** | Java 21, Spring Boot 3.5.10, Spring Security, JPA, MyBatis |
 | **Frontend** | Vue.js 3, Vite 7, Tailwind CSS 4, Pinia, Vue Router 4, Axios |
 | **Database** | MariaDB 10.11 |
 | **API 문서** | Swagger / springdoc-openapi 2.8 |
@@ -279,7 +279,7 @@ be22-4st-team2-project/
 
 ### 8.1 사전 요구사항
 
-- Java 17+
+- Java 21+
 - Node.js 20+
 - MariaDB 10.11+ (또는 Docker)
 
@@ -377,7 +377,7 @@ npm run dev
 - ✅ 인증 가드 (라우터 네비게이션 가드)
 
 **인프라:**
-- ✅ Backend Dockerfile (Multi-stage: JDK 17 빌드 → 실행)
+- ✅ Backend Dockerfile (Multi-stage: Amazon Corretto 21 빌드 → 실행)
 - ✅ Frontend Dockerfile (Multi-stage: Node 20 빌드 → Nginx 서빙)
 - ✅ Docker Compose (Backend + Frontend + MariaDB)
 - ✅ K8s manifests (Deployments, Services, Ingress)
