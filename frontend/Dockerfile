@@ -1,5 +1,6 @@
 # Build stage
-FROM node:20-alpine AS build
+# --platform=linux/amd64 : Mac Apple Silicon(M1/M2/M3) 환경에서 native 모듈 크래시 방지
+FROM --platform=linux/amd64 node:20-alpine AS build
 
 WORKDIR /app
 
@@ -15,8 +16,12 @@ COPY . .
 # Build the app
 RUN npm run build
 
+# dist 디렉토리 존재 여부 검증: 빌드 실패 시 명확한 에러 메시지 출력 후 중단
+RUN test -d /app/dist && test -f /app/dist/index.html \
+    || (echo "ERROR: /app/dist/index.html not found. npm run build may have failed." && exit 1)
+
 # Production stage
-FROM nginx:alpine
+FROM --platform=linux/amd64 nginx:alpine
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
