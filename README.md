@@ -115,6 +115,8 @@ be22-4st-team2-project/
 ├─ README.md
 ├─ .gitignore
 ├─ .editorconfig
+├─ .env.example               # ⭐ 환경변수 템플릿 (Git 추적 O)
+├─ .env                       # 실제 환경변수 파일   (Git 추적 X)
 ├─ .github/
 │  ├─ ISSUE_TEMPLATE/         # 이슈 템플릿
 │  └─ PULL_REQUEST_TEMPLATE.md
@@ -285,8 +287,20 @@ be22-4st-team2-project/
 
 ### 8.2 Docker Compose로 전체 실행 (권장)
 
+**① 환경변수 파일 생성** (최초 1회)
+
 ```bash
-docker-compose up --build
+# .env.example을 복사해서 .env 파일을 만듭니다
+cp .env.example .env
+```
+
+> `.env` 파일을 열어 비밀번호, JWT 시크릿 등 민감한 값을 실제 환경에 맞게 수정하세요.  
+> `.env` 파일이 없어도 `docker-compose.yml`의 기본값으로 동작하므로, 빠른 테스트 시에는 생략 가능합니다.
+
+**② 전체 빌드 & 실행**
+
+```bash
+docker compose up --build
 ```
 
 | 서비스 | 포트 | 설명 |
@@ -299,7 +313,8 @@ docker-compose up --build
 
 **Backend:**
 ```bash
-# MariaDB가 localhost:3306에서 실행 중이어야 합니다
+# .env 파일의 환경변수를 로드하거나, 아래 변수를 직접 설정한 후 실행
+# export SPRING_DATASOURCE_PASSWORD=your_password
 ./gradlew bootRun
 ```
 
@@ -327,16 +342,42 @@ npm run dev
 
 ## 9. 환경 변수 / 설정
 
+### 9.1 환경변수 파일 구조
+
+| 파일 | Git 추적 | 용도 |
+|------|----------|------|
+| `.env.example` | ✅ 추적 O | 팀 공유용 템플릿. 실제 민감값 없이 변수명과 설명만 포함 |
+| `.env` | ❌ 추적 X | 로컬·배포 실제 설정값. 민감 정보 포함 |
+| `src/main/resources/application.yml` | ✅ 추적 O | Spring Boot 기본 설정. 환경변수 참조(`${VAR:-default}`) |
+| `frontend/.env.development` | ✅ 추적 O | Vue.js 개발 환경 변수 |
+| `frontend/.env.production` | ✅ 추적 O | Vue.js 프로덕션 환경 변수 |
+
+### 9.2 환경변수 목록
+
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `SPRING_DATASOURCE_URL` | `jdbc:mariadb://localhost:3306/salesboost` | DB 접속 URL |
-| `SPRING_DATASOURCE_USERNAME` | `root` | DB 사용자 |
-| `SPRING_DATASOURCE_PASSWORD` | `root` | DB 비밀번호 |
-| `APP_JWT_SECRET` | (개발용 기본값) | JWT 서명 시크릿 (32bytes 이상) |
-| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | CORS 허용 오리진 |
+| `DB_DATABASE` | `salesboost` | MariaDB 데이터베이스 이름 |
+| `DB_USERNAME` | `root` | MariaDB 접속 사용자 이름 |
+| `DB_ROOT_PASSWORD` | `root` | MariaDB root 비밀번호 ⚠️ 프로덕션에서 반드시 변경 |
+| `SPRING_DATASOURCE_URL` | `jdbc:mariadb://mariadb:3306/salesboost?...` | Spring Boot DB 접속 URL |
+| `SPRING_DATASOURCE_USERNAME` | `${DB_USERNAME}` | Spring Boot DB 접속 사용자 |
+| `SPRING_DATASOURCE_PASSWORD` | `${DB_ROOT_PASSWORD}` | Spring Boot DB 비밀번호 |
+| `APP_JWT_SECRET` | (개발용 기본값) | JWT 서명 시크릿 ⚠️ 32바이트 이상, 프로덕션에서 반드시 변경 |
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost,...` | CORS 허용 오리진 (쉼표 구분) |
 
-- 기본 설정 파일: `src/main/resources/application.yml`
-- 프론트엔드 환경: `frontend/.env.development`, `frontend/.env.production`
+### 9.3 설정 우선순위
+
+```
+[높음] docker-compose.yml의 environment 섹션에서 주입된 환경변수
+         ↕ (docker-compose는 .env 파일을 자동으로 읽어 위 값에 보간)
+       .env 파일의 값  →  없으면 docker-compose.yml의 ${VAR:-default} 기본값
+[낮음] src/main/resources/application.yml 의 ${SPRING_*:fallback} 기본값
+```
+
+> 💡 **팀 온보딩 가이드**  
+> 1. `cp .env.example .env` 실행  
+> 2. `.env` 파일에서 `DB_ROOT_PASSWORD`, `APP_JWT_SECRET` 값을 강력한 값으로 변경  
+> 3. `.env` 파일을 절대 Git에 커밋하지 마세요 (`.gitignore`에 등록됨)
 
 ---
 

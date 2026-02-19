@@ -5,6 +5,13 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+### Environment Variables ###
+# 실제 환경변수 파일은 Git에서 제외 (민감 정보 보호)
+.env
+.env.local
+.env.*.local
+# .env.example 은 예외적으로 추적 유지 (템플릿 역할)
+
 ### STS ###
 .apt_generated
 .classpath
