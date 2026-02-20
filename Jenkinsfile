@@ -4,9 +4,27 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'ckato9173'
         IMAGE_TAG = "${BUILD_NUMBER}"
+        GITHUB_REPO = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
+    }
+
+    triggers {
+        // 5분마다 GitHub에 변경사항 확인 → 변경 있으면 자동 빌드
+        pollSCM('H/5 * * * *')
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: "${GITHUB_REPO}",
+                        credentialsId: 'github-credentials'
+                    ]]
+                )
+            }
+        }
+
         stage('Backend Test') {
             steps {
                 bat 'gradlew.bat clean test'
