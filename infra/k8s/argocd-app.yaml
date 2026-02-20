@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: salesboost
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git
+    targetRevision: main
+    path: infra/k8s
+    directory:
+      recurse: true
+      exclude: argocd-app.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
