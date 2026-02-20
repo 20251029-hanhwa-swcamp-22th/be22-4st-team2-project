@@ -561,94 +561,83 @@ kubectl delete -f infra/k8s/ingress.yaml -f infra/k8s/deployments/ -f infra/k8s/
 
 ## 6. Phase 4: Jenkins CI 파이프라인
 
-### 6.1 Jenkins 설치 (Docker Desktop Kubernetes)
+### 6.1 우리 환경
 
-```bash
-# Jenkins namespace 생성
-kubectl create namespace jenkins
+| 항목 | 값 |
+|------|---|
+| Jenkins 주소 | `http://localhost:18080` |
+| Jenkins 설치 방식 | Windows 로컬 설치 (Docker/K8s 아님) |
+| Docker Hub ID | `ckato9173` |
+| GitHub Repo | `20251029-hanhwa-swcamp-22th/be22-4st-team2-project` |
+| 이미지 태그 | `ckato9173/salesboost-backend:{빌드번호}`, `ckato9173/salesboost-frontend:{빌드번호}` |
 
-# Jenkins를 Helm으로 설치 (가장 간편)
-# Helm이 없다면: https://helm.sh/docs/intro/install/
-helm repo add jenkins https://charts.jenkins.io
-helm repo update
+> Jenkins가 Windows에 직접 설치되어 있어 `docker`, `kubectl` 명령을 바로 사용할 수 있습니다.
 
-helm install jenkins jenkins/jenkins \
-  --namespace jenkins \
-  --set controller.serviceType=LoadBalancer \
-  --set controller.servicePort=9090
+### 6.2 Jenkins Credentials 등록
 
-# 설치 확인 (2~3분 소요)
-kubectl get pods -n jenkins -w
-# jenkins-0   2/2   Running   ...
+Jenkins 관리 → Credentials → System → Global credentials → **Add Credentials**:
 
-# Jenkins 초기 관리자 비밀번호 확인
-kubectl exec -n jenkins jenkins-0 -- cat /run/secrets/additional/chart-admin-password
-# 또는
-kubectl get secret -n jenkins jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 -d
-```
+| ID (정확히 일치해야 함) | Kind | 입력값 |
+|---|---|---|
+| `github-token` | **Secret text** | GitHub PAT 토큰만 입력 |
+| `dockerhub-credentials` | **Username with password** | Username: `ckato9173`, Password: Docker Hub 비밀번호 또는 Access Token |
 
-Jenkins 접속: `http://localhost:9090`
-- ID: `admin`
-- PW: 위에서 확인한 비밀번호
+**GitHub PAT 생성 방법:**
 
-### 6.2 Jenkins 플러그인 설치
+1. GitHub → Settings → Developer settings → Personal access tokens → **Tokens (classic)**
+2. **Generate new token (classic)**
+3. 권한: `repo` 전체 체크
+4. 생성된 토큰을 Jenkins의 `github-token` Secret text에 입력
 
-Jenkins 관리 → Plugins → Available plugins에서 설치:
+**Docker Hub Access Token 생성 방법:**
 
-- **Pipeline** (기본 포함)
-- **Git** (기본 포함)
-- **Docker Pipeline**
-- **Kubernetes** (K8s 에이전트 사용 시)
-- **Credentials Binding**
+1. https://hub.docker.com/settings/security
+2. **New Access Token** → 이름 입력 → 권한: Read & Write
+3. 생성된 토큰을 Jenkins의 `dockerhub-credentials` Password에 입력
 
-### 6.3 Jenkins Credentials 등록
+### 6.3 Jenkinsfile (프로젝트에 이미 포함됨)
 
-Jenkins 관리 → Credentials → System → Global credentials:
-
-| ID | 종류 | 용도 |
-|----|------|------|
-| `github-credentials` | Username with password (또는 SSH key) | GitHub 레포 접근 |
-| `dockerhub-credentials` | Username with password | Docker Hub 이미지 Push |
-
-> Docker Hub 대신 로컬 레지스트리를 쓰면 `dockerhub-credentials`는 불필요합니다 (5.2절 로컬 이미지 빌드 참고).
-
-### 6.4 Jenkinsfile 작성
-
-프로젝트 루트에 `Jenkinsfile`을 생성합니다:
+프로젝트 루트의 `Jenkinsfile`:
 
 ```groovy
 pipeline {
     agent any
 
     environment {
-        // Docker Hub 사용 시 (예: your-dockerhub-id/salesboost-backend)
-        DOCKER_REGISTRY = 'your-dockerhub-id'
-        IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
+        DOCKER_REGISTRY = 'ckato9173'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        GITHUB_REPO = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
+    }
+
+    triggers {
+        // 5분마다 GitHub에 변경사항 확인 → 변경 있으면 자동 빌드
+        pollSCM('H/5 * * * *')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
-            }
-        }
-
-        stage('Backend Build & Test') {
-            steps {
-                sh './gradlew clean build'
-            }
-            post {
-                always {
-                    junit '**/build/test-results/test/*.xml'
+                withCredentials([string(
+                    credentialsId: 'github-token',
+                    variable: 'GITHUB_TOKEN'
+                )]) {
+                    checkout scmGit(
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            url: "https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git"
+                        ]]
+                    )
                 }
             }
         }
 
-        stage('Frontend Build') {
+        stage('Backend Test') {
             steps {
-                dir('frontend') {
-                    sh 'npm ci'
-                    sh 'npm run build'
+                bat 'gradlew.bat clean test'
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml'
                 }
             }
         }
@@ -657,14 +646,12 @@ pipeline {
             parallel {
                 stage('Backend Image') {
                     steps {
-                        sh "docker build -t ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} ."
-                        sh "docker tag ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} ${DOCKER_REGISTRY}/salesboost-backend:latest"
+                        bat "docker build -t %DOCKER_REGISTRY%/salesboost-backend:%IMAGE_TAG% -t %DOCKER_REGISTRY%/salesboost-backend:latest ."
                     }
                 }
                 stage('Frontend Image') {
                     steps {
-                        sh "docker build -t ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} ./frontend"
-                        sh "docker tag ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} ${DOCKER_REGISTRY}/salesboost-frontend:latest"
+                        bat "docker build -t %DOCKER_REGISTRY%/salesboost-frontend:%IMAGE_TAG% -t %DOCKER_REGISTRY%/salesboost-frontend:latest ./frontend"
                     }
                 }
             }
@@ -677,142 +664,85 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-                    sh "docker push ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}"
-                    sh "docker push ${DOCKER_REGISTRY}/salesboost-backend:latest"
-                    sh "docker push ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}"
-                    sh "docker push ${DOCKER_REGISTRY}/salesboost-frontend:latest"
-                }
-            }
-        }
-
-        stage('Update K8s Manifests') {
-            steps {
-                // GitOps: K8s 매니페스트의 이미지 태그를 업데이트
-                sh """
-                    sed -i 's|image: .*salesboost-backend:.*|image: ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}|' infra/k8s/deployments/backend.yaml
-                    sed -i 's|image: .*salesboost-frontend:.*|image: ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}|' infra/k8s/deployments/frontend.yaml
-                    sed -i 's|imagePullPolicy: Never|imagePullPolicy: Always|' infra/k8s/deployments/backend.yaml
-                    sed -i 's|imagePullPolicy: Never|imagePullPolicy: Always|' infra/k8s/deployments/frontend.yaml
-                """
-
-                withCredentials([usernamePassword(
-                    credentialsId: 'github-credentials',
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_TOKEN'
-                )]) {
-                    sh """
-                        git config user.email "jenkins@salesboost.com"
-                        git config user.name "Jenkins CI"
-                        git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml
-                        git commit -m "ci: update image tags to ${IMAGE_TAG}"
-                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/your-repo.git HEAD:main
-                    """
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "파이프라인 성공! 이미지 태그: ${IMAGE_TAG}"
-        }
-        failure {
-            echo "파이프라인 실패. 로그를 확인하세요."
-        }
-        always {
-            sh 'docker logout || true'
-        }
-    }
-}
-```
-
-### 6.5 Jenkins Pipeline 생성
-
-1. Jenkins 대시보드 → **New Item**
-2. 이름: `salesboost-pipeline`
-3. 타입: **Pipeline** 선택
-4. Pipeline 섹션:
-   - Definition: **Pipeline script from SCM**
-   - SCM: **Git**
-   - Repository URL: `https://github.com/your-org/your-repo.git`
-   - Credentials: `github-credentials`
-   - Branch: `*/main`
-   - Script Path: `Jenkinsfile`
-5. **Save**
-
-### 6.6 GitHub Webhook 설정 (자동 빌드 트리거)
-
-> Docker Desktop은 외부에서 접근 불가하므로, 로컬 환경에서는 수동 빌드 또는 Poll SCM을 사용합니다.
-
-**로컬 환경: Poll SCM 방식**
-
-Jenkins Pipeline 설정 → Build Triggers → **Poll SCM**:
-```
-H/5 * * * *
-```
-→ 5분마다 GitHub에 변경사항이 있는지 확인 후 자동 빌드
-
-**외부 서버 환경: Webhook 방식**
-
-GitHub → Settings → Webhooks → Add webhook:
-- Payload URL: `http://your-jenkins-url:9090/github-webhook/`
-- Content type: `application/json`
-- Events: `Just the push event`
-
-### 6.7 로컬 전용 간소화 파이프라인 (Docker Hub 없이)
-
-Docker Hub를 사용하지 않고 로컬 K8s에 바로 배포하는 간소화 버전:
-
-```groovy
-// Jenkinsfile.local — 로컬 전용 간소화 버전
-pipeline {
-    agent any
-
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Backend Test') {
-            steps {
-                sh './gradlew clean test'
-            }
-        }
-
-        stage('Docker Build (Local)') {
-            parallel {
-                stage('Backend Image') {
-                    steps {
-                        sh 'docker build -t salesboost-backend:latest .'
-                    }
-                }
-                stage('Frontend Image') {
-                    steps {
-                        sh 'docker build -t salesboost-frontend:latest ./frontend'
-                    }
+                    bat 'echo %DOCKER_PASS%| docker login -u %DOCKER_USER% --password-stdin'
+                    bat "docker push %DOCKER_REGISTRY%/salesboost-backend:%IMAGE_TAG%"
+                    bat "docker push %DOCKER_REGISTRY%/salesboost-backend:latest"
+                    bat "docker push %DOCKER_REGISTRY%/salesboost-frontend:%IMAGE_TAG%"
+                    bat "docker push %DOCKER_REGISTRY%/salesboost-frontend:latest"
                 }
             }
         }
 
         stage('Deploy to K8s') {
             steps {
-                sh '''
-                    kubectl apply -f infra/k8s/common.yaml
-                    kubectl apply -f infra/k8s/deployments/db.yaml
-                    kubectl apply -f infra/k8s/deployments/backend.yaml
-                    kubectl apply -f infra/k8s/deployments/frontend.yaml
-                    kubectl apply -f infra/k8s/ingress.yaml
-                    kubectl rollout restart deployment salesboost-backend
-                    kubectl rollout restart deployment salesboost-frontend
-                '''
+                bat 'kubectl apply -f infra/k8s/common.yaml'
+                bat 'kubectl apply -f infra/k8s/deployments/backend.yaml'
+                bat 'kubectl apply -f infra/k8s/deployments/frontend.yaml'
+                bat 'kubectl apply -f infra/k8s/ingress.yaml'
+                bat 'kubectl rollout restart deployment salesboost-backend'
+                bat 'kubectl rollout restart deployment salesboost-frontend'
             }
+        }
+
+        stage('Verify') {
+            steps {
+                bat 'kubectl rollout status deployment salesboost-backend --timeout=180s'
+                bat 'kubectl rollout status deployment salesboost-frontend --timeout=60s'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG}"
+        }
+        failure {
+            echo 'Pipeline FAILED'
+        }
+        always {
+            bat 'docker logout || exit 0'
         }
     }
 }
 ```
+
+### 6.4 파이프라인 흐름
+
+```
+Checkout (GitHub 토큰으로 clone)
+       ↓
+Backend Test (gradlew.bat clean test)
+       ↓
+Docker Build (병렬: backend + frontend)
+  → ckato9173/salesboost-backend:{빌드번호}
+  → ckato9173/salesboost-frontend:{빌드번호}
+       ↓
+Docker Push (Docker Hub에 업로드)
+       ↓
+Deploy to K8s (kubectl apply + rollout restart)
+       ↓
+Verify (rollout status로 배포 완료 확인)
+```
+
+### 6.5 Jenkins Pipeline Job 생성
+
+1. `http://localhost:18080/view/all/newJob` 접속
+2. 이름: `salesboost-pipeline`
+3. 타입: **Pipeline** 선택 → **OK**
+4. Pipeline 섹션:
+   - Definition: **Pipeline script from SCM**
+   - SCM: **Git**
+   - Repository URL: `https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git`
+   - Credentials: *(없으면 비워두기 — Jenkinsfile 내에서 토큰으로 checkout 함)*
+   - Branch: `*/main`
+   - Script Path: `Jenkinsfile`
+5. **Save** → **Build Now**
+
+### 6.6 빌드 트리거
+
+Jenkinsfile에 `pollSCM('H/5 * * * *')`이 설정되어 있어, **5분마다 GitHub에 변경사항을 자동 확인**합니다. main에 push가 있으면 자동 빌드가 시작됩니다.
+
+수동 빌드: Jenkins 대시보드 → `salesboost-pipeline` → **Build Now**
 
 ---
 
@@ -832,24 +762,12 @@ kubectl get pods -n argocd -w
 # argocd-server-xxxxx             1/1   Running
 # argocd-repo-server-xxxxx        1/1   Running
 # argocd-application-controller-0  1/1   Running
-# ...
-
-# ArgoCD CLI 설치 (선택사항, 웹 UI로도 가능)
-# Windows: https://github.com/argoproj/argo-cd/releases 에서 다운로드
-# 또는 Chocolatey: choco install argocd-cli
 ```
 
 ### 7.2 ArgoCD 웹 UI 접속
 
 ```bash
-# 방법 1: LoadBalancer로 변경 (Docker Desktop 권장)
-kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
-
-# 포트 확인
-kubectl get svc argocd-server -n argocd
-# argocd-server   LoadBalancer   10.x.x.x   localhost   80:3xxxx/TCP,443:3xxxx/TCP
-
-# 방법 2: 포트포워딩 (LoadBalancer 충돌 시)
+# 포트포워딩 (80/443은 Ingress Controller가 사용 중이므로 별도 포트)
 kubectl port-forward svc/argocd-server -n argocd 8443:443
 # https://localhost:8443 으로 접속
 ```
@@ -859,127 +777,59 @@ kubectl port-forward svc/argocd-server -n argocd 8443:443
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 ```
 
-ArgoCD 접속: `https://localhost` (또는 `https://localhost:8443`)
+ArgoCD 접속: `https://localhost:8443`
 - ID: `admin`
 - PW: 위에서 확인한 비밀번호
 
-> 접속 후 Settings → Account → admin → Update Password에서 비밀번호를 변경하세요.
-
 ### 7.3 ArgoCD에 Git Repository 등록
 
-**웹 UI 방식:**
+Settings → Repositories → **Connect Repo**:
 
-1. Settings → Repositories → **Connect Repo**
-2. Via: **HTTPS**
-3. Repository URL: `https://github.com/your-org/your-repo.git`
-4. Username: GitHub 사용자명
-5. Password: GitHub Personal Access Token (PAT)
-6. **Connect**
-
-**CLI 방식:**
-
-```bash
-argocd repo add https://github.com/your-org/your-repo.git \
-  --username your-github-id \
-  --password your-github-pat
-```
+| 항목 | 값 |
+|------|---|
+| Via | HTTPS |
+| Repository URL | `https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git` |
+| Username | GitHub 사용자명 |
+| Password | GitHub PAT 토큰 |
 
 ### 7.4 ArgoCD Application 생성
 
-**웹 UI 방식:**
+Applications → **New App**:
 
-1. Applications → **New App**
-2. 설정:
-   - Application Name: `salesboost`
-   - Project: `default`
-   - Sync Policy: `Automatic` (자동 배포) 또는 `Manual` (수동 승인)
-   - Repository URL: `https://github.com/your-org/your-repo.git`
-   - Revision: `main`
-   - Path: `infra/k8s`  (매니페스트 경로)
-   - Cluster URL: `https://kubernetes.default.svc`
-   - Namespace: `default`
-3. **Create**
+| 항목 | 값 |
+|------|---|
+| Application Name | `salesboost` |
+| Project | `default` |
+| Sync Policy | `Automatic` (자동 배포) |
+| Repository URL | `https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git` |
+| Revision | `main` |
+| Path | `infra/k8s` |
+| Cluster URL | `https://kubernetes.default.svc` |
+| Namespace | `default` |
 
-**YAML 파일 방식:**
+→ **Create**
 
-```yaml
-# infra/argocd/application.yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: salesboost
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/your-org/your-repo.git
-    targetRevision: main
-    path: infra/k8s
-    # 특정 파일만 배포하려면 directory 설정 사용
-    directory:
-      recurse: true
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: default
-  syncPolicy:
-    automated:
-      prune: true       # Git에서 삭제된 리소스 자동 제거
-      selfHeal: true     # 클러스터에서 수동 변경 시 원상복구
-    syncOptions:
-      - CreateNamespace=true
-```
-
-```bash
-kubectl apply -f infra/argocd/application.yaml
-```
-
-### 7.5 ArgoCD 배포 흐름 확인
+### 7.5 ArgoCD 동작 흐름
 
 ```
-                    Git Push (이미지 태그 변경)
-                         │
-                         ▼
-                   ┌───────────┐
-                   │  GitHub   │
-                   │  (main)   │
-                   └─────┬─────┘
-                         │ ArgoCD가 3분마다 폴링
-                         ▼
-                   ┌───────────┐
-                   │  ArgoCD   │  "OutOfSync" 감지
-                   │  Server   │
-                   └─────┬─────┘
-                         │ syncPolicy.automated
-                         ▼
-                   ┌───────────┐
-                   │ K8s Apply │  새 이미지로 Pod 교체
-                   │ (Rolling  │
-                   │  Update)  │
-                   └───────────┘
+Jenkins 파이프라인 완료 (이미지 Push + K8s Deploy)
+       ↓
+Git Push (Jenkinsfile이 K8s 매니페스트를 변경했다면)
+       ↓
+ArgoCD가 3분마다 GitHub 폴링
+       ↓
+"OutOfSync" 감지 → 자동 Sync
+       ↓
+K8s에 새 매니페스트 Apply → Pod 롤링 업데이트
 ```
 
-ArgoCD 웹 UI에서 확인할 수 있는 것들:
-
-- **Sync Status**: `Synced` (정상) / `OutOfSync` (변경 감지)
-- **Health Status**: `Healthy` / `Degraded` / `Progressing`
-- **리소스 트리**: Pod, Service, Deployment 등 시각적으로 표시
-- **Diff**: Git과 클러스터 간 차이점
+> 현재 구조에서는 Jenkins가 직접 `kubectl apply`로 배포하기 때문에 ArgoCD는 **보조 역할** (동기화 상태 모니터링, 수동 롤백 UI)입니다. ArgoCD를 주 배포 도구로 쓰려면 Jenkinsfile의 `Deploy to K8s` 스테이지를 제거하고, Jenkins는 이미지 Push까지만 담당하면 됩니다.
 
 ### 7.6 수동 동기화 & 롤백
 
-```bash
-# CLI로 수동 동기화
-argocd app sync salesboost
-
-# 이전 버전으로 롤백
-argocd app rollback salesboost
-
-# 특정 Git 커밋으로 롤백
-argocd app sync salesboost --revision <commit-hash>
-
-# 또는 웹 UI에서:
-# Applications → salesboost → History → 원하는 버전 → Rollback
-```
+ArgoCD 웹 UI에서:
+- **Sync**: Applications → salesboost → **Sync** 버튼
+- **Rollback**: Applications → salesboost → **History** → 원하는 버전 → **Rollback**
 
 ---
 
@@ -987,77 +837,70 @@ argocd app sync salesboost --revision <commit-hash>
 
 ### 8.1 체크리스트
 
-아래 순서대로 전체 파이프라인을 검증합니다:
-
 ```
 □ Step 1: Docker Desktop Kubernetes 활성화 확인
-           kubectl get nodes → Ready
+           kubectl get nodes → docker-desktop Ready
 
 □ Step 2: NGINX Ingress Controller 설치
            kubectl get pods -n ingress-nginx → Running
 
-□ Step 3: JWT 시크릿 생성
-           openssl rand -base64 48 → .env에 저장
-
-□ Step 4: K8s Secret/ConfigMap 적용
+□ Step 3: K8s Secret/ConfigMap 적용
            kubectl apply -f infra/k8s/common.yaml
-           kubectl get secret,configmap
 
-□ Step 5: Docker 이미지 빌드
-           docker build -t salesboost-backend:latest .
-           docker build -t salesboost-frontend:latest ./frontend
-
-□ Step 6: K8s 서비스 배포
-           kubectl apply -f infra/k8s/deployments/
+□ Step 4: K8s 서비스 배포
+           kubectl apply -f infra/k8s/deployments/backend.yaml
+           kubectl apply -f infra/k8s/deployments/frontend.yaml
            kubectl apply -f infra/k8s/ingress.yaml
            kubectl get pods → 모두 Running
 
-□ Step 7: 접속 테스트
-           curl http://localhost → 프론트엔드 HTML
-           curl http://localhost/api/portfolios → JSON 응답
+□ Step 5: 접속 테스트
+           http://localhost → 프론트엔드
+           http://localhost/api/portfolios → {"success":true,"data":[]}
 
-□ Step 8: Jenkins 설치 & 파이프라인 생성
-           http://localhost:9090 → Pipeline 수동 실행
+□ Step 6: Jenkins Credentials 등록
+           github-token (Secret text) + dockerhub-credentials (Username with password)
 
-□ Step 9: ArgoCD 설치 & Application 생성
+□ Step 7: Jenkins Pipeline Job 생성 & Build Now
+           http://localhost:18080 → 파이프라인 성공 확인
+
+□ Step 8: Docker Hub 이미지 확인
+           https://hub.docker.com/u/ckato9173 → 이미지 업로드 확인
+
+□ Step 9: (선택) ArgoCD 설치 & Application 생성
            https://localhost:8443 → Synced & Healthy
-
-□ Step 10: E2E 테스트
-            코드 수정 → git push → Jenkins 빌드 →
-            이미지 태그 업데이트 → ArgoCD 자동 동기화 →
-            새 Pod 배포 확인
 ```
 
 ### 8.2 포트 사용 현황
 
 | 서비스 | 포트 | 비고 |
 |--------|------|------|
-| Frontend (K8s) | 80 | LoadBalancer 또는 Ingress |
-| Backend API | 8080 | ClusterIP (Ingress `/api` 로 노출) |
-| MariaDB | 3306 | ClusterIP (내부 전용) |
-| Jenkins | 9090 | LoadBalancer |
-| ArgoCD | 443 (→8443) | LoadBalancer 또는 포트포워딩 |
+| Frontend + Ingress | 80 | NGINX Ingress Controller (LoadBalancer) |
+| Backend API | 8080 | ClusterIP (Ingress `/api`로 노출) |
+| 공용 DB | 221.148.116.109:10002 | 외부 MariaDB |
+| Jenkins | 18080 | Windows 로컬 설치 |
+| ArgoCD | 8443 | 포트포워딩 (`kubectl port-forward`) |
 
-> 포트 충돌 주의: Frontend(80)와 Ingress Controller(80)가 겹칠 수 있습니다. Ingress를 쓸 경우 frontend Service 타입을 `ClusterIP`로 변경하는 것을 권장합니다.
-
-### 8.3 포트 충돌 해결
-
-만약 80번 포트가 이미 사용 중이라면:
+### 8.3 K8s 끄고 켤 때
 
 ```bash
-# 어떤 프로세스가 80번 포트를 사용하는지 확인 (PowerShell)
-netstat -ano | findstr :80
+# === 끌 때 ===
+kubectl delete -f infra/k8s/ingress.yaml \
+  -f infra/k8s/deployments/backend.yaml \
+  -f infra/k8s/deployments/frontend.yaml \
+  -f infra/k8s/common.yaml
 
-# Docker Compose가 80 포트를 사용 중이면 먼저 중지
-docker compose down
-```
+# === 켤 때 ===
+kubectl apply -f infra/k8s/common.yaml
+kubectl apply -f infra/k8s/deployments/backend.yaml
+kubectl apply -f infra/k8s/deployments/frontend.yaml
+kubectl apply -f infra/k8s/ingress.yaml
 
-frontend Service를 ClusterIP로 변경하고 Ingress만 사용:
-
-```yaml
-# infra/k8s/deployments/frontend.yaml 수정
-spec:
-  type: ClusterIP    # LoadBalancer → ClusterIP
+# === 코드 수정 후 반영 ===
+docker build -t ckato9173/salesboost-backend:latest .
+kubectl rollout restart deployment salesboost-backend
+# 또는 프론트엔드:
+docker build -t ckato9173/salesboost-frontend:latest ./frontend
+kubectl rollout restart deployment salesboost-frontend
 ```
 
 ---
@@ -1067,110 +910,76 @@ spec:
 ### Pod가 CrashLoopBackOff 상태일 때
 
 ```bash
-# 로그 확인
+# 로그 확인 (가장 먼저 확인!)
 kubectl logs <pod-name> --previous
 
 # 이벤트 확인
 kubectl describe pod <pod-name>
 
 # 흔한 원인:
-# - DB 연결 실패 → Secret/ConfigMap의 DB 정보 확인
+# - DB 연결 실패 → ConfigMap의 SPRING_DATASOURCE_URL 확인
 # - JWT Secret 미설정 → app-secret 확인
-# - 이미지가 없음 → docker images 에서 빌드 확인
+# - 이미지 Pull 실패 → Docker Hub에 이미지가 있는지 확인
 ```
 
 ### 백엔드가 DB에 연결 못 할 때
 
 ```bash
-# DB Pod 상태 확인
-kubectl get pods -l app=salesboost-db
-kubectl logs -l app=salesboost-db
-
-# 백엔드에서 DB 접근 가능한지 확인
-kubectl exec deploy/salesboost-backend -- sh -c \
-  'curl -sf salesboost-db:3306 || echo "DB 접속 불가"'
+# K8s Pod에서 공용 DB 접근 테스트
+kubectl run db-test --rm -it --restart=Never --image=mariadb:10.11 \
+  -- mariadb -h 221.148.116.109 -P 10002 -u root -pdevops_team2 -e "SHOW DATABASES;"
 
 # ConfigMap의 URL 확인
 kubectl get configmap app-config -o yaml
-# SPRING_DATASOURCE_URL 값이 jdbc:mariadb://salesboost-db:3306/... 인지 확인
 ```
 
 ### Ingress가 동작하지 않을 때
 
 ```bash
-# Ingress Controller 확인
+# Ingress Controller 상태 확인
 kubectl get pods -n ingress-nginx
 
-# Ingress 상태 확인
-kubectl describe ingress salesboost-ingress
-
-# ADDRESS가 비어있으면 Ingress Controller가 아직 준비 안 된 것
+# Ingress 리소스 확인
 kubectl get ingress
-# NAME                CLASS   HOSTS       ADDRESS     PORTS
-# salesboost-ingress  nginx   localhost   localhost   80
+# ADDRESS가 localhost인지 확인
 
-# Ingress Controller 로그 확인
+# Ingress Controller 로그
 kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=50
 ```
 
 ### 이미지 Pull 실패 (ImagePullBackOff)
 
 ```bash
-# 로컬 이미지를 K8s에서 못 찾는 경우
-# 원인: imagePullPolicy가 Always로 되어있으면 레지스트리에서 받으려 함
+# Docker Hub에 이미지가 있는지 확인
+docker pull ckato9173/salesboost-backend:latest
 
-# 해결: imagePullPolicy를 Never로 확인
+# imagePullPolicy 확인
 kubectl get deploy salesboost-backend -o yaml | grep imagePullPolicy
-# imagePullPolicy: Never  ← 이어야 함 (로컬 빌드 사용 시)
+# imagePullPolicy: Always  ← Docker Hub 사용 시
 
-# 이미지 존재 확인
-docker images | grep salesboost
+# Docker Hub가 private이면 imagePullSecret 필요
+# (public이면 불필요)
 ```
 
-### Jenkins에서 Docker 명령 실행 불가
+### Jenkins 파이프라인 실패 시
 
-```bash
-# Jenkins Pod에서 Docker 소켓 접근이 필요
-# Docker Desktop K8s에서는 Docker-in-Docker 또는 Docker 소켓 마운트 필요
-
-# Helm 설치 시 옵션 추가:
-helm upgrade jenkins jenkins/jenkins \
-  --namespace jenkins \
-  --set persistence.enabled=true \
-  --set controller.serviceType=LoadBalancer \
-  --set controller.servicePort=9090 \
-  --set agent.volumes[0].type=HostPath \
-  --set agent.volumes[0].hostPath=/var/run/docker.sock \
-  --set agent.volumes[0].mountPath=/var/run/docker.sock
 ```
-
-### ArgoCD Application이 OutOfSync인데 Sync 안 될 때
-
-```bash
-# Sync 에러 확인
-argocd app get salesboost
-
-# 강제 동기화
-argocd app sync salesboost --force
-
-# 프루닝 포함 동기화
-argocd app sync salesboost --prune
-
-# 웹 UI에서: App Details → Sync → Replace (체크) → Synchronize
+# Checkout 실패 → github-token Credential 확인 (ID가 정확히 'github-token'인지)
+# Docker Push 실패 → dockerhub-credentials Credential 확인
+# gradlew.bat 실패 → Jenkins workspace에 gradlew.bat이 있는지 확인
+# kubectl 실패 → Jenkins 실행 유저의 PATH에 kubectl이 있는지 확인
 ```
 
 ### Windows 관련 주의사항
 
 ```bash
-# Git Bash에서 gradlew 실행 시
-# "Permission denied" → 실행 권한 부여
+# Git Bash에서 gradlew 실행 시 "Permission denied"
 git update-index --chmod=+x gradlew
 
-# 줄바꿈 문제 (CRLF → LF)
-# Dockerfile, shell script가 실행 안 될 때
+# CRLF → LF 줄바꿈 문제 (Dockerfile, shell script)
 git config core.autocrlf input
 
-# Docker build 시 Gradle 빌드 느림
+# Docker build 느림
 # Docker Desktop → Settings → Resources → Memory: 최소 4GB 이상 권장
 ```
 
@@ -1178,14 +987,14 @@ git config core.autocrlf input
 
 ## 부록: 환경별 설정값 요약
 
-| 항목 | 로컬 개발 (.env) | Docker Compose (.env) | Kubernetes (Secret/ConfigMap) |
-|------|-------------------|----------------------|-------------------------------|
-| DB URL | `jdbc:mariadb://127.0.0.1:3306/salesboost...` | `jdbc:mariadb://mariadb:3306/salesboost...` | `jdbc:mariadb://salesboost-db:3306/salesboost...` (내부 DB) 또는 `jdbc:mariadb://db.example.com:3306/salesboost...` (외부 DB) |
-| DB User | `root` (기본값) | `salesboost` (.env) | `salesboost` (app-config ConfigMap) |
-| DB Password | `mariadb` (기본값) | `salesboost` (.env) | db-secret Secret |
-| JWT Secret | application.yml 기본값 | `APP_JWT_SECRET` (.env) | app-secret Secret |
-| CORS Origins | `localhost:5173,localhost:3000` | `localhost,localhost:5173,localhost:3000` | `localhost,localhost:80` |
-| 이미지 정책 | - | - | `imagePullPolicy: Never` (로컬) / `Always` (레지스트리) |
+| 항목 | 로컬 개발 (.env 없이) | Docker Compose (.env) | Kubernetes (Secret/ConfigMap) |
+|------|---|---|---|
+| DB URL | `jdbc:mariadb://127.0.0.1:3306/salesboost...` | `jdbc:mariadb://mariadb:3306/salesboost...` | `jdbc:mariadb://221.148.116.109:10002/salesboost...` |
+| DB User | `root` | `.env`의 `DB_USERNAME` | `app-config` ConfigMap의 `DB_USERNAME` |
+| DB Password | `mariadb` | `.env`의 `DB_PASSWORD` | `db-secret` Secret의 `password` |
+| JWT Secret | application.yml 기본값 | `.env`의 `APP_JWT_SECRET` | `app-secret` Secret의 `jwt-secret` |
+| CORS Origins | `localhost:5173,localhost:3000` | `.env`의 `APP_CORS_ALLOWED_ORIGINS` | `app-config` ConfigMap |
+| 이미지 | - | - | `ckato9173/salesboost-*:latest` (`imagePullPolicy: Always`) |
 
 ---
 
@@ -1205,14 +1014,7 @@ kubectl exec -it deploy/salesboost-backend -- sh  # 백엔드 쉘 접속
 kubectl rollout restart deploy/salesboost-backend  # 백엔드 재시작
 kubectl rollout status deploy/salesboost-backend   # 롤아웃 상태 확인
 
-# === Jenkins ===
-kubectl get pods -n jenkins        # Jenkins Pod 상태
-kubectl logs -n jenkins jenkins-0  # Jenkins 로그
-
-# === ArgoCD ===
-kubectl get pods -n argocd         # ArgoCD Pod 상태
-argocd app list                    # 등록된 Application 목록
-argocd app get salesboost          # 상세 상태 확인
-argocd app sync salesboost         # 수동 동기화
-argocd app history salesboost      # 배포 히스토리
+# === Docker Hub ===
+docker push ckato9173/salesboost-backend:latest    # 수동 Push
+docker pull ckato9173/salesboost-backend:latest    # 수동 Pull
 ```

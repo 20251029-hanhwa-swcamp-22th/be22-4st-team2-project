@@ -15,13 +15,17 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scmGit(
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: "${GITHUB_REPO}",
-                        credentialsId: 'github-credentials'
-                    ]]
-                )
+                withCredentials([string(
+                    credentialsId: 'github-token',
+                    variable: 'GITHUB_TOKEN'
+                )]) {
+                    checkout scmGit(
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            url: "https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git"
+                        ]]
+                    )
+                }
             }
         }
 
