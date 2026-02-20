@@ -123,8 +123,8 @@ be22-4st-team2-project/
 ├─ docs/
 │  ├─ SalesBoost_ERD.mermaid  # ERD (Mermaid)
 │  ├─ API_IMPLEMENTATION.md   # API 상세 문서
-│  ├─ IMPLEMENTATION_SUMMARY.md
-│  ├─ requirements.md
+│  ├─ DEPLOYMENT_INTEGRATED_GUIDE.md  # 통합 배포 가이드 (Docker/K8s/Jenkins/ArgoCD)
+│  ├─ BUG_FIX_SUMMARY.md     # 버그 수정 이력
 │  ├─ 01_프로젝트_기획서.docx
 │  └─ 03_요구사항_정의서.docx
 ├─ frontend/                   # Vue.js 3 프론트엔드
@@ -145,10 +145,9 @@ be22-4st-team2-project/
 │     │  └─ portfolio.js
 │     ├─ services/api.js       # Axios API 클라이언트
 │     ├─ components/
-│     │  ├─ layout/
-│     │  │  ├─ TheHeader.vue
-│     │  │  └─ TheFooter.vue
-│     │  └─ HelloWorld.vue
+│     │  └─ layout/
+│     │     ├─ TheHeader.vue
+│     │     └─ TheFooter.vue
 │     └─ views/
 │        ├─ HomeView.vue       # 랜딩 페이지
 │        ├─ ServiceView.vue    # 서비스 소개
@@ -197,8 +196,7 @@ be22-4st-team2-project/
 │  └─ test/
 ├─ infra/
 │  ├─ docker/
-│  │  ├─ mariadb/init.sql      # DB 초기화 스크립트
-│  │  └─ nginx/                # Nginx 설정
+│  │  └─ mariadb/init.sql      # DB 초기화 스크립트
 │  └─ k8s/
 │     ├─ common.yaml
 │     ├─ ingress.yaml
@@ -206,10 +204,6 @@ be22-4st-team2-project/
 │        ├─ backend.yaml
 │        ├─ frontend.yaml
 │        └─ db.yaml
-├─ scripts/
-│  ├─ dev.sh
-│  ├─ build.sh
-│  └─ deploy.sh
 ├─ docker-compose.yml          # 로컬/배포용 Docker Compose
 ├─ Dockerfile                  # 백엔드 Docker 이미지
 ├─ build.gradle
@@ -460,7 +454,8 @@ npm run dev
 | 프로젝트 기획서 | `docs/01_프로젝트_기획서.docx` | 프로젝트 기획 문서 |
 | 요구사항 정의서 | `docs/03_요구사항_정의서.docx` | 상세 요구사항 |
 | API 상세 문서 | `docs/API_IMPLEMENTATION.md` | API 엔드포인트 상세 |
-| 구현 요약 | `docs/IMPLEMENTATION_SUMMARY.md` | 백엔드 구현 요약 |
+| 통합 배포 가이드 | `docs/DEPLOYMENT_INTEGRATED_GUIDE.md` | Docker/K8s/Jenkins/ArgoCD 배포 |
+| 버그 수정 이력 | `docs/BUG_FIX_SUMMARY.md` | 버그 수정 내역 |
 | ERD | `docs/SalesBoost_ERD.mermaid` | 데이터베이스 ERD |
 
 ---

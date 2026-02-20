@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: salesboost-backend
-          image: salesboost-backend:latest
-          imagePullPolicy: Never
+          image: ckato9173/salesboost-backend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:

@@ -10,8 +10,8 @@ stringData:
   #   --from-literal=root-password='your-strong-root-password' \
   #   --from-literal=password='your-strong-app-password' \
   #   --dry-run=client -o yaml | kubectl apply -f -
-  root-password: changeme_root
-  password: changeme_app
+  root-password: devops_team2
+  password: devops_team2
 
 ---
 apiVersion: v1
@@ -23,7 +23,7 @@ type: Opaque
 stringData:
   # ⚠️ 프로덕션 배포 전 반드시 32바이트 이상의 랜덤 키로 변경하세요
   # 생성 예시: openssl rand -base64 48
-  jwt-secret: change-this-to-very-long-secret-key-at-least-32bytes
+  jwt-secret: OitdYNE0L6ggftqNaxOQl4+fGBGbrK5p3cbyydOAplb4F3BoHQJGHxgqDEDGjJeD
 
 ---
 apiVersion: v1
@@ -33,8 +33,8 @@ metadata:
   namespace: default
 data:
   DB_DATABASE: "salesboost"
-  DB_USERNAME: "salesboost"
-  SPRING_DATASOURCE_URL: "jdbc:mariadb://salesboost-db:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false"
+  DB_USERNAME: "root"
+  SPRING_DATASOURCE_URL: "jdbc:mariadb://221.148.116.109:10002/salesboost?allowPublicKeyRetrieval=true&useSSL=false"
   # ⚠️ 프로덕션에서는 실제 서비스 도메인으로 변경
   APP_CORS_ALLOWED_ORIGINS: "http://localhost,http://localhost:80"
 
