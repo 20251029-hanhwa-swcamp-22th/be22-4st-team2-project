@@ -104,6 +104,7 @@ docker compose logs -f backend
 ├── infra/k8s/                  # Kubernetes 매니페스트
 │   ├── common.yaml             # Secret, ConfigMap, PVC
 │   ├── ingress.yaml            # Ingress 라우팅 규칙
+│   ├── argocd-app.yaml         # ArgoCD Application 매니페스트
 │   └── deployments/
 │       ├── backend.yaml
 │       ├── frontend.yaml
@@ -607,6 +608,7 @@ pipeline {
         DOCKER_REGISTRY = 'ckato9173'
         IMAGE_TAG = "${BUILD_NUMBER}"
         GITHUB_REPO = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
+        KUBECONFIG = 'C:\\Users\\playdata2\\.kube\\config'
     }
 
     triggers {
@@ -767,9 +769,8 @@ kubectl get pods -n argocd -w
 ### 7.2 ArgoCD 웹 UI 접속
 
 ```bash
-# 포트포워딩 (80/443은 Ingress Controller가 사용 중이므로 별도 포트)
-kubectl port-forward svc/argocd-server -n argocd 8443:443
-# https://localhost:8443 으로 접속
+# NodePort로 ArgoCD Server 노출 (포트 30443)
+kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "targetPort": 8080, "nodePort": 30443}]}}'
 ```
 
 ```bash
@@ -777,7 +778,7 @@ kubectl port-forward svc/argocd-server -n argocd 8443:443
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 ```
 
-ArgoCD 접속: `https://localhost:8443`
+ArgoCD 접속: `https://localhost:30443` (self-signed 인증서 경고는 무시)
 - ID: `admin`
 - PW: 위에서 확인한 비밀번호
 
@@ -794,13 +795,19 @@ Settings → Repositories → **Connect Repo**:
 
 ### 7.4 ArgoCD Application 생성
 
-Applications → **New App**:
+프로젝트에 이미 `infra/k8s/argocd-app.yaml`이 포함되어 있습니다:
+
+```bash
+kubectl apply -f infra/k8s/argocd-app.yaml
+```
+
+또는 ArgoCD 웹 UI에서 수동 생성: Applications → **New App**:
 
 | 항목 | 값 |
 |------|---|
 | Application Name | `salesboost` |
 | Project | `default` |
-| Sync Policy | `Automatic` (자동 배포) |
+| Sync Policy | `Automatic` (prune + selfHeal) |
 | Repository URL | `https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git` |
 | Revision | `main` |
 | Path | `infra/k8s` |
@@ -867,7 +874,7 @@ ArgoCD 웹 UI에서:
            https://hub.docker.com/u/ckato9173 → 이미지 업로드 확인
 
 □ Step 9: (선택) ArgoCD 설치 & Application 생성
-           https://localhost:8443 → Synced & Healthy
+           https://localhost:30443 → Synced & Healthy
 ```
 
 ### 8.2 포트 사용 현황
@@ -878,7 +885,7 @@ ArgoCD 웹 UI에서:
 | Backend API | 8080 | ClusterIP (Ingress `/api`로 노출) |
 | 공용 DB | 221.148.116.109:10002 | 외부 MariaDB |
 | Jenkins | 18080 | Windows 로컬 설치 |
-| ArgoCD | 8443 | 포트포워딩 (`kubectl port-forward`) |
+| ArgoCD | 30443 | NodePort (`https://localhost:30443`) |
 
 ### 8.3 K8s 끄고 켤 때
 

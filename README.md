@@ -20,7 +20,7 @@ Public 화면(서비스 소개/포트폴리오/제휴문의)과 Admin 화면(로
 | **Frontend** | Vue.js 3, Vite 7, Tailwind CSS 4, Pinia, Vue Router 4, Axios |
 | **Database** | MariaDB 10.11 |
 | **API 문서** | Swagger / springdoc-openapi 2.8 |
-| **인프라** | Docker, Docker Compose, Kubernetes, Nginx |
+| **인프라** | Docker, Docker Compose, Kubernetes, Nginx, Jenkins CI, ArgoCD |
 | **인증** | JWT (jjwt 0.12.6) |
 | **빌드** | Gradle 8 (Backend), npm (Frontend) |
 
@@ -194,12 +194,14 @@ be22-4st-team2-project/
 │  │     ├─ application.yml
 │  │     └─ mappers/           # MyBatis XML
 │  └─ test/
+├─ Jenkinsfile                   # Jenkins CI/CD 파이프라인
 ├─ infra/
 │  ├─ docker/
 │  │  └─ mariadb/init.sql      # DB 초기화 스크립트
 │  └─ k8s/
 │     ├─ common.yaml
 │     ├─ ingress.yaml
+│     ├─ argocd-app.yaml       # ArgoCD Application 매니페스트
 │     └─ deployments/
 │        ├─ backend.yaml
 │        ├─ frontend.yaml
@@ -412,7 +414,9 @@ npm run dev
 | **백엔드 API** | ✅ 완료 | 제휴문의/포트폴리오 CRUD, JWT 인증, Spring Security |
 | **프론트엔드** | ✅ 완료 | Vue.js 3 SPA - Public 4페이지 + Admin 3페이지 |
 | **Docker** | ✅ 완료 | Docker Compose 3-tier (Frontend/Backend/DB) |
-| **K8s** | ✅ 완료 | Deployment + Service + Ingress 매니페스트 |
+| **K8s** | ✅ 완료 | Deployment + Service + Ingress 매니페스트, Docker Hub 이미지 |
+| **Jenkins CI** | ✅ 완료 | 자동 빌드/테스트/Docker Push/K8s 배포 파이프라인 |
+| **ArgoCD CD** | ✅ 완료 | GitOps 자동 동기화 (prune + selfHeal) |
 | **API 문서** | ✅ 완료 | Swagger/OpenAPI 자동 생성 |
 | **GitHub Templates** | ✅ 완료 | Issue/PR 템플릿 |
 
@@ -444,6 +448,9 @@ npm run dev
 - ✅ Frontend Dockerfile (Multi-stage: Node 20 빌드 → Nginx 서빙)
 - ✅ Docker Compose (Backend + Frontend + MariaDB)
 - ✅ K8s manifests (Deployments, Services, Ingress)
+- ✅ Jenkins CI 파이프라인 (Checkout → Test → Docker Build/Push → K8s Deploy)
+- ✅ ArgoCD GitOps CD (infra/k8s/ 자동 동기화)
+- ✅ Docker Hub 이미지 레지스트리 (ckato9173/salesboost-*)
 
 ---
 
