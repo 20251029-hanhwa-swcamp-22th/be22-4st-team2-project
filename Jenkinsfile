@@ -5,6 +5,7 @@ pipeline {
         DOCKER_REGISTRY = 'ckato9173'
         IMAGE_TAG = "${BUILD_NUMBER}"
         GITHUB_REPO = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
+        KUBECONFIG = 'C:\\Users\\playdata2\\.kube\\config'
     }
 
     triggers {
