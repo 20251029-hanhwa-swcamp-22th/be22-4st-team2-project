@@ -9,8 +9,7 @@ pipeline {
     }
 
     triggers {
-        // 5분마다 GitHub에 변경사항 확인 → 변경 있으면 자동 빌드
-        pollSCM('H/5 * * * *')
+        githubPush()
     }
 
     stages {
