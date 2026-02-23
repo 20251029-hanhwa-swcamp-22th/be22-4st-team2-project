@@ -7,7 +7,9 @@ services:
       platforms:
         - linux/amd64
     ports:
-      - "8080:8080"
+      # 127.0.0.1 바인딩: 외부 네트워크에서 /actuator/** 직접 접근 방지
+      # 로컬 개발 및 Docker 내부 네트워크 통신은 정상 동작
+      - "127.0.0.1:8080:8080"
     environment:
       # .env 파일의 값을 참조. 파일이 없으면 :- 뒤의 기본값을 사용
       - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL:-jdbc:mariadb://mariadb:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false}
@@ -15,15 +17,27 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-salesboost}
       - APP_JWT_SECRET=${APP_JWT_SECRET:-change-this-to-very-long-secret-key-at-least-32bytes}
       - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:5173,http://localhost:3000}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      - LOGSTASH_HOST=${LOGSTASH_HOST:-logstash:5001}
+      # 로컬 Docker Compose에서는 dev 프로파일 활성화 (show-sql, format_sql ON)
+      # K8s 배포 시에는 이 변수가 없으므로 기본값(prod 동작: SQL 로깅 OFF)
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+          cpus: '2.0'
     healthcheck:
-      # Spring Boot가 정상 기동되어 API 응답 가능한지 확인
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/portfolios > /dev/null || exit 1"]
+      # Spring Boot Actuator health endpoint로 기동 상태 확인
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health > /dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 60s
     depends_on:
       mariadb:
+        condition: service_healthy
+      logstash:
         condition: service_healthy
     networks:
       - salesboost-network
@@ -35,7 +49,12 @@ services:
       platforms:
         - linux/amd64
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
     healthcheck:
       # nginx가 실제로 index.html을 서빙하는지 확인 (curl은 nginx:alpine에 추가 설치됨)
       test: ["CMD-SHELL", "curl -sf http://localhost/index.html > /dev/null || exit 1"]
@@ -63,6 +82,11 @@ services:
     # DBeaver 등 외부 DB 클라이언트 접속이 필요한 경우 아래 주석을 해제하세요:
     # ports:
     #   - "${DB_HOST_BIND:-127.0.0.1}:3306:3306"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./infra/docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -75,8 +99,123 @@ services:
     networks:
       - salesboost-network
 
+  # ============================================================
+  # Monitoring: ELK Stack (Elasticsearch + Logstash + Kibana)
+  # ============================================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.29
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      # ⚠️ 개발 환경 전용 설정: 로그에 민감 정보(이메일, 연락처)가 포함될 수 있으므로
+      # 운영 환경에서는 반드시 xpack.security.enabled=true로 변경하고 인증을 설정하세요.
+      - xpack.security.enabled=false
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    # 호스트 포트 노출 없음: Docker 내부 네트워크(elasticsearch:9200)로만 통신
+    # 외부 디버깅 필요 시 주석 해제: ports: ["127.0.0.1:9200:9200"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - salesboost-network
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.29
+    volumes:
+      - ./infra/docker/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    # 호스트 포트 노출 없음: 백엔드가 Docker 내부 네트워크(logstash:5001)로 직접 전송
+    environment:
+      - LS_JAVA_OPTS=-Xms512m -Xmx512m
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9600/ > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - salesboost-network
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.29
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "127.0.0.1:5601:5601"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - salesboost-network
+
+  # ============================================================
+  # Monitoring: Prometheus + Grafana
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:v2.53.3
+    volumes:
+      - ./infra/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/docker/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus_data:/prometheus
+    # 호스트 포트 노출 없음: Grafana가 Docker 내부 네트워크(prometheus:9090)로 접근
+    # 외부 디버깅 필요 시 주석 해제: ports: ["127.0.0.1:9090:9090"]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    networks:
+      - salesboost-network
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    volumes:
+      - ./infra/docker/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    depends_on:
+      - prometheus
+    networks:
+      - salesboost-network
+
 volumes:
   mariadb_data:
+  elasticsearch_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   salesboost-network:

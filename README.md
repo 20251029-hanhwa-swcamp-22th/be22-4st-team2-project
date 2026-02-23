@@ -20,8 +20,9 @@ Public 화면(서비스 소개/포트폴리오/제휴문의)과 Admin 화면(로
 | **Frontend** | Vue.js 3, Vite 7, Tailwind CSS 4, Pinia, Vue Router 4, Axios |
 | **Database** | MariaDB 10.11 |
 | **API 문서** | Swagger / springdoc-openapi 2.8 |
-| **인프라** | Docker, Docker Compose, Kubernetes, Nginx, Jenkins CI, ArgoCD |
-| **인증** | JWT (jjwt 0.12.6) |
+| **모니터링** | ELK Stack (Elasticsearch, Logstash, Kibana) 7.17.29, Prometheus 2.53, Grafana 11.5, Micrometer Tracing |
+| **인프라** | Docker, Docker Compose, Kubernetes, Nginx, Jenkins CI (GitHub Webhook), ArgoCD |
+| **인증** | JWT (jjwt 0.12.6) + Refresh Token 자동 갱신 |
 | **빌드** | Gradle 8 (Backend), npm (Frontend) |
 
 ---
@@ -35,13 +36,27 @@ Public 화면(서비스 소개/포트폴리오/제휴문의)과 Admin 화면(로
 └─────────────┘     └──────┬───────────┘     └────────────┘
                            │ /api/*
                     ┌──────▼───────────┐
-                    │  Spring Boot     │
-                    │  Backend (:8080) │
-                    └──────┬───────────┘
-                           │
-                    ┌──────▼───────────┐
-                    │  MariaDB (:3306) │
-                    └──────────────────┘
+                    │  Spring Boot     │──────────────────────────────┐
+                    │  Backend (:8080) │──────────────┐              │
+                    └──────┬───────────┘              │              │
+                           │                          │              │
+                    ┌──────▼───────────┐    ┌────────▼─────────┐   │
+                    │  MariaDB (:3306) │    │ Logstash (:5001) │   │
+                    └──────────────────┘    └────────┬─────────┘   │
+                                                     │     /actuator/prometheus
+                                            ┌────────▼─────────┐   │
+                                            │ Elasticsearch    │   │
+                                            │ (:9200)          │   │
+                                            └────────┬─────────┘   │
+                                                     │              │
+                                            ┌────────▼─────────┐  ┌▼─────────────────┐
+                                            │ Kibana (:5601)   │  │ Prometheus (:9090)│
+                                            │ (로그 시각화)     │  └────────┬──────────┘
+                                            └──────────────────┘           │
+                                                                  ┌────────▼──────────┐
+                                                                  │ Grafana (:3001)   │
+                                                                  │ (메트릭 대시보드)  │
+                                                                  └───────────────────┘
 ```
 
 ---
@@ -59,6 +74,16 @@ erDiagram
         varchar(50) role "역할 (ROLE_ADMIN 등)"
         boolean enabled "활성 여부"
     }
+
+    REFRESH_TOKEN {
+        bigint id PK "토큰 ID (AUTO_INCREMENT)"
+        bigint admin_user_id FK "관리자 ID"
+        varchar(255) token UK "리프레시 토큰 (UUID)"
+        datetime expires_at "만료 일시"
+        datetime created_at "생성 일시"
+    }
+
+    ADMIN_USER ||--o{ REFRESH_TOKEN : "has"
 
     INQUIRY {
         bigint id PK "문의 ID (AUTO_INCREMENT)"
@@ -102,6 +127,7 @@ erDiagram
 | 테이블 | 설명 |
 |--------|------|
 | `admin_user` | 관리자 계정 (BCrypt 비밀번호, 역할 기반 접근 제어) |
+| `refresh_token` | JWT 리프레시 토큰 (자동 갱신, 로그아웃 시 삭제) |
 | `inquiry` | 제휴 문의 (PENDING → IN_PROGRESS → DONE 워크플로우) |
 | `portfolio` | 포트폴리오 (공개/비공개, 표시 순서 관리) |
 | `portfolio_image` | 포트폴리오 상세 이미지 (1:N 관계, 순서 지원) |
@@ -167,10 +193,10 @@ be22-4st-team2-project/
 │  │  │  ├─ config/
 │  │  │  │  └─ SwaggerConfig.java
 │  │  │  ├─ domain/
-│  │  │  │  ├─ admin/          # 관리자 인증
+│  │  │  │  ├─ admin/          # 관리자 인증 + Refresh Token
 │  │  │  │  │  ├─ controller/
-│  │  │  │  │  ├─ dto/
-│  │  │  │  │  ├─ entity/
+│  │  │  │  │  ├─ dto/         # AdminLoginRequest, TokenRefreshRequest 등
+│  │  │  │  │  ├─ entity/      # AdminUser, RefreshToken
 │  │  │  │  │  ├─ repository/
 │  │  │  │  │  └─ service/
 │  │  │  │  ├─ inquiry/        # 제휴 문의
@@ -191,21 +217,31 @@ be22-4st-team2-project/
 │  │  │     ├─ auth/
 │  │  │     └─ jwt/
 │  │  └─ resources/
-│  │     ├─ application.yml
-│  │     └─ mappers/           # MyBatis XML
+│  │     ├─ application.yml     # 기본 설정 (프로덕션)
+│  │     ├─ application-dev.yml # 개발 환경 설정 (Swagger, SQL 로깅)
+│  │     ├─ logback-spring.xml  # 로그 설정 (Console + Logstash + TraceID)
+│  │     └─ mappers/            # MyBatis XML
 │  └─ test/
 ├─ Jenkinsfile                   # Jenkins CI/CD 파이프라인
 ├─ infra/
 │  ├─ docker/
-│  │  └─ mariadb/init.sql      # DB 초기화 스크립트
+│  │  ├─ mariadb/init.sql      # DB 초기화 스크립트
+│  │  ├─ logstash/logstash.conf           # Logstash 파이프라인 설정
+│  │  ├─ prometheus/
+│  │  │  ├─ prometheus.yml              # Prometheus 스크래핑 설정
+│  │  │  └─ alert_rules.yml            # Prometheus 알림 규칙
+│  │  ├─ elasticsearch/                 # Elasticsearch 설정
+│  │  └─ grafana/provisioning/datasources/ # Grafana 데이터소스 자동 설정
 │  └─ k8s/
 │     ├─ common.yaml
 │     ├─ ingress.yaml
+│     ├─ hpa.yaml              # HPA 자동 확장 (CPU 70% → 최대 3 Pod)
 │     ├─ argocd-app.yaml       # ArgoCD Application 매니페스트
 │     └─ deployments/
 │        ├─ backend.yaml
-│        ├─ frontend.yaml
-│        └─ db.yaml
+│        └─ frontend.yaml
+├─ tests/
+│  └─ load-test.js             # k6 부하 테스트 스크립트
 ├─ docker-compose.yml          # 로컬/배포용 Docker Compose
 ├─ Dockerfile                  # 백엔드 Docker 이미지
 ├─ build.gradle
@@ -256,7 +292,9 @@ be22-4st-team2-project/
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| `POST` | `/api/admin/login` | 관리자 로그인 |
+| `POST` | `/api/admin/login` | 관리자 로그인 (Access + Refresh Token 발급) |
+| `POST` | `/api/admin/token/refresh` | Access Token 갱신 (Refresh Token 기반) |
+| `POST` | `/api/admin/logout` | 로그아웃 (서버 측 Refresh Token 삭제) |
 | `GET` | `/api/admin/inquiries` | 문의 목록 조회 |
 | `GET` | `/api/admin/inquiries/{id}` | 문의 상세 조회 |
 | `PATCH` | `/api/admin/inquiries/{id}/status` | 문의 상태 변경 |
@@ -319,8 +357,13 @@ docker compose up --build
 |--------|------|------|
 | 웹사이트 (Frontend) | <http://localhost> | Vue.js SPA + Nginx 서빙 |
 | 관리자 페이지 | <http://localhost/admin/login> | 로그인: `admin` / `admin1234!` |
-| Backend API | <http://localhost:8080> | Spring Boot (직접 접근 불필요) |
-| Swagger UI | <http://localhost:8080/swagger-ui.html> | API 문서 |
+| Backend API | <http://localhost:8080> | Spring Boot (직접 접근 불필요, 127.0.0.1 바인딩) |
+| Swagger UI | <http://localhost:8080/api/swagger-ui.html> | API 문서 (dev 프로파일에서만 활성화) |
+| Kibana | <http://localhost:5601> | 로그 검색/시각화 (ELK, 127.0.0.1 바인딩) |
+| Grafana | <http://localhost:3001> | 메트릭 대시보드 (`admin`/`admin`, 127.0.0.1 바인딩) |
+
+> **참고**: Elasticsearch(:9200)와 Prometheus(:9090)는 보안을 위해 호스트 포트를 노출하지 않습니다.
+> Docker 내부 네트워크에서만 접근 가능하며, 외부 디버깅이 필요한 경우 `docker-compose.yml`에서 포트 주석을 해제하세요.
 
 > **데이터 초기화**: `docker compose down -v && docker compose up --build`
 > (`-v` 옵션으로 DB 볼륨을 제거하면 init.sql이 다시 실행되어 샘플 데이터가 초기 삽입됩니다)
@@ -384,6 +427,9 @@ npm run dev
 | `DB_HOST_BIND` | `127.0.0.1` | MariaDB 포트 바인딩 IP. Windows에서 접근 안 될 때 `0.0.0.0`으로 변경 |
 | `APP_JWT_SECRET` | `change-this-...` | JWT 서명 시크릿 ⚠️ 32바이트 이상, 프로덕션에서 반드시 변경 |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost,http://localhost:80` | CORS 허용 오리진 (쉼표 구분) |
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana 관리자 계정 |
+| `GRAFANA_ADMIN_PASSWORD` | `admin` | Grafana 관리자 비밀번호 ⚠️ 프로덕션에서 변경 |
+| `LOGSTASH_HOST` | `logstash:5001` | Logstash TCP 주소 |
 
 > `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` 는 `docker-compose.yml`이
 > `DB_USERNAME` / `DB_PASSWORD` 값을 읽어 Spring Boot에 자동으로 주입하므로 `.env`에 별도 설정 불필요합니다.
@@ -405,19 +451,53 @@ npm run dev
 
 ---
 
+## 9.4 K8s Secret 생성 가이드
+
+K8s 매니페스트(`infra/k8s/common.yaml`)에는 보안을 위해 **placeholder 값**이 들어 있습니다.
+`kubectl apply -f` 전에 아래 스크립트로 실제 Secret을 먼저 생성하세요.
+
+```bash
+# 1. DB Secret (DB 접속 정보)
+kubectl create secret generic db-secret \
+  --from-literal=root-password='<강력한-root-비밀번호>' \
+  --from-literal=password='<강력한-앱-비밀번호>' \
+  --from-literal=datasource-url='jdbc:mariadb://<DB-HOST>:<DB-PORT>/salesboost?allowPublicKeyRetrieval=true&useSSL=false' \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. App Secret (JWT 서명 키)
+JWT_KEY=$(openssl rand -base64 48)
+kubectl create secret generic app-secret \
+  --from-literal=jwt-secret="$JWT_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# 3. Grafana Secret (모니터링 대시보드 관리자)
+kubectl create secret generic grafana-secret \
+  --from-literal=admin-password='<강력한-Grafana-비밀번호>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+> **주의**: placeholder(`CHANGE_ME_*`) 값이 그대로 배포되면 보안에 취약합니다.
+> 반드시 위 명령어로 Secret을 먼저 생성한 뒤 ArgoCD 동기화 또는 `kubectl apply`를 수행하세요.
+> ArgoCD는 `ignoreDifferences` 설정으로 Secret의 `/data`, `/stringData` 필드를 동기화에서 제외하므로,
+> 수동 생성한 Secret 값이 Git의 placeholder로 덮어씌워지지 않습니다.
+
+---
+
 ## 10. 현재 상태
 
 ### ✅ 구현 완료
 
 | 영역 | 상태 | 상세 |
 |------|------|------|
-| **백엔드 API** | ✅ 완료 | 제휴문의/포트폴리오 CRUD, JWT 인증, Spring Security |
-| **프론트엔드** | ✅ 완료 | Vue.js 3 SPA - Public 4페이지 + Admin 3페이지 |
-| **Docker** | ✅ 완료 | Docker Compose 3-tier (Frontend/Backend/DB) |
-| **K8s** | ✅ 완료 | Deployment + Service + Ingress 매니페스트, Docker Hub 이미지 |
-| **Jenkins CI** | ✅ 완료 | 자동 빌드/테스트/Docker Push/K8s 배포 파이프라인 |
-| **ArgoCD CD** | ✅ 완료 | GitOps 자동 동기화 (prune + selfHeal) |
-| **API 문서** | ✅ 완료 | Swagger/OpenAPI 자동 생성 |
+| **백엔드 API** | ✅ 완료 | 제휴문의/포트폴리오 CRUD, JWT + Refresh Token 인증, Spring Security |
+| **프론트엔드** | ✅ 완료 | Vue.js 3 SPA - Public 4페이지 + Admin 3페이지, 토큰 자동 갱신 |
+| **Docker** | ✅ 완료 | Docker Compose 전체 스택 (Frontend/Backend/DB/ELK/Prometheus/Grafana), 리소스 제한 |
+| **K8s** | ✅ 완료 | Deployment + Service + Ingress + HPA, imagePullPolicy: Always |
+| **Jenkins CI** | ✅ 완료 | GitHub Webhook → Test → Build → **Trivy 스캔** → Push → GitOps |
+| **ArgoCD CD** | ✅ 완료 | GitOps 자동 동기화 (prune + selfHeal), sync 상태 확인 |
+| **모니터링** | ✅ 완료 | ELK 7.17.29 로그 수집 + Prometheus v2.53.3/Grafana 11.5.2 메트릭 + 알림 규칙 |
+| **보안** | ✅ 완료 | non-root 컨테이너, 파일 업로드 검증, Swagger 프로덕션 비활성화, 보안 헤더 |
+| **API 문서** | ✅ 완료 | Swagger/OpenAPI 자동 생성 (dev 프로파일 전용) |
 | **GitHub Templates** | ✅ 완료 | Issue/PR 템플릿 |
 
 ### 구현 상세
@@ -425,11 +505,14 @@ npm run dev
 **백엔드:**
 - ✅ 제휴문의 등록/조회/관리 API (FR-06, FR-11~FR-14)
 - ✅ 포트폴리오 CRUD + 공개설정 + 순서관리 (FR-04, FR-05, FR-15~FR-20)
-- ✅ 관리자 인증 - JWT 발급/검증 (FR-11)
+- ✅ 관리자 인증 - JWT 발급/검증 + Refresh Token 자동 갱신 (FR-11)
 - ✅ Spring Security 설정 (BCrypt, CORS)
 - ✅ MyBatis 동적 쿼리 (검색/필터링/페이징)
-- ✅ 유효성 검증 + 글로벌 예외 처리
+- ✅ 유효성 검증 + 글로벌 예외 처리 (`@Valid` 적용)
 - ✅ URL 기반 썸네일 관리 (포트폴리오 이미지)
+- ✅ 파일 업로드 검증 (확장자/MIME 타입/경로 탐색 방지)
+- ✅ N+1 쿼리 최적화 (`@EntityGraph` 활용)
+- ✅ 분산 추적 (Micrometer Tracing + TraceID MDC)
 
 **프론트엔드:**
 - ✅ 랜딩 페이지 (`HomeView`)
@@ -442,15 +525,33 @@ npm run dev
 - ✅ 공통 레이아웃 - Header/Footer
 - ✅ Pinia 상태관리 (auth, inquiry, portfolio)
 - ✅ 인증 가드 (라우터 네비게이션 가드)
+- ✅ Refresh Token 기반 자동 토큰 갱신 (Axios 인터셉터)
+- ✅ 서버 측 로그아웃 (Refresh Token 삭제)
 
 **인프라:**
-- ✅ Backend Dockerfile (Multi-stage: Amazon Corretto 21 빌드 → 실행)
-- ✅ Frontend Dockerfile (Multi-stage: Node 20 빌드 → Nginx 서빙)
-- ✅ Docker Compose (Backend + Frontend + MariaDB)
-- ✅ K8s manifests (Deployments, Services, Ingress)
-- ✅ Jenkins CI 파이프라인 (Checkout → Test → Docker Build/Push → K8s Deploy)
-- ✅ ArgoCD GitOps CD (infra/k8s/ 자동 동기화)
+- ✅ Backend Dockerfile (Amazon Corretto 21, non-root 유저 실행)
+- ✅ Frontend Dockerfile (Multi-stage: Node 20 빌드 → Nginx 서빙, non-root 유저 실행)
+- ✅ Docker Compose (전체 스택 + 리소스 제한 적용)
+- ✅ K8s manifests (Deployments, Services, Ingress, `imagePullPolicy: Always`)
+- ✅ Jenkins CI 파이프라인 (GitHub Webhook → Test → Build → Trivy 스캔 → Push → GitOps)
+- ✅ ArgoCD GitOps CD (infra/k8s/ 자동 동기화, sync 상태 확인)
 - ✅ Docker Hub 이미지 레지스트리 (ckato9173/salesboost-*)
+- ✅ ELK Stack (Elasticsearch + Logstash + Kibana 7.17.29) 로그 수집/시각화
+- ✅ Prometheus v2.53.3 + Grafana 11.5.2 메트릭 모니터링 (Actuator + Micrometer)
+- ✅ Prometheus 알림 규칙 (BackendDown, HighErrorRate, HighJvmMemory, DBConnectionPoolLow)
+- ✅ Logback → Logstash TCP 로그 전송 (JSON 포맷, 비동기, TraceID 포함)
+- ✅ HPA 자동 확장 (CPU 70% 초과 시 백엔드 Pod 최대 3개)
+- ✅ k6 부하 테스트 스크립트 (HPA 연동 데모)
+- ✅ Nginx 보안 헤더 (CSP, Referrer-Policy, Permissions-Policy)
+
+**보안 강화:**
+- ✅ 컨테이너 non-root 유저 실행 (backend: appuser, frontend: nginx)
+- ✅ Actuator `show-details: never` (내부 인프라 정보 비노출)
+- ✅ Swagger UI 프로덕션 비활성화 (`@Profile("dev")` + springdoc 속성 토글)
+- ✅ 파일 업로드 확장자/MIME 타입 이중 검증 + 경로 탐색 방지
+- ✅ Docker Compose 모든 서비스 리소스 제한 (memory/CPU)
+- ✅ 불필요한 포트 호스트 노출 제거 (ES, Prometheus 내부 전용)
+- ✅ Logstash `service_healthy` 조건으로 초기 로그 유실 방지
 
 ---
 
@@ -463,6 +564,8 @@ npm run dev
 | API 상세 문서 | `docs/API_IMPLEMENTATION.md` | API 엔드포인트 상세 |
 | 통합 배포 가이드 | `docs/DEPLOYMENT_INTEGRATED_GUIDE.md` | Docker/K8s/Jenkins/ArgoCD 배포 |
 | 버그 수정 이력 | `docs/BUG_FIX_SUMMARY.md` | 버그 수정 내역 |
+| 모니터링 가이드 | `docs/MONITORING_GUIDE.md` | ELK + Prometheus/Grafana 설정 가이드 |
+| DevOps 고급 기능 | `docs/DEVOPS_ADVANCED_GUIDE.md` | HPA, 부하 테스트, 알림, 발표 대본 |
 | ERD | `docs/SalesBoost_ERD.mermaid` | 데이터베이스 ERD |
 
 ---

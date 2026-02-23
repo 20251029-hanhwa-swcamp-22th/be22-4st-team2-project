@@ -1,0 +1,22 @@
+# ServiceMonitor: Prometheus Operator(kube-prometheus-stack) 환경에서
+# 메트릭 수집 대상을 자동 탐지하기 위한 CRD
+# - 전통적 kubernetes_sd_configs 방식에서는 Pod 어노테이션(prometheus.io/*)으로 충분하지만
+# - Prometheus Operator 모델에서는 이 ServiceMonitor가 명시적으로 필요합니다
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: salesboost-backend
+  labels:
+    app: salesboost-backend
+    # Prometheus Operator가 이 ServiceMonitor를 탐지하도록
+    # 운영 환경의 Prometheus release 라벨에 맞춰 수정 필요
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: salesboost-backend
+  endpoints:
+    - port: metrics
+      path: /actuator/prometheus
+      interval: 15s
+      scrapeTimeout: 10s

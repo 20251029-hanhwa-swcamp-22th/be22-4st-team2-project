@@ -30,9 +30,13 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/admin/login", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/admin/login", "/api/admin/token/refresh").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/portfolios/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/inquiries").permitAll()
+                        // Actuator: management.server.port=8081 별도 서블릿 컨텍스트로 실행되므로
+                        // 이 SecurityFilterChain(8080)의 적용 범위 밖 → K8s Service/Ingress에서 8081 미노출로 격리
+                        .requestMatchers("/api/swagger-ui/**", "/api/v3/api-docs/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

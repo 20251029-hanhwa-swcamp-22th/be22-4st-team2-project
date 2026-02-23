@@ -35,7 +35,14 @@ public class JwtProvider {
 
     @PostConstruct
     void init() {
-        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "JWT secret must be at least 32 bytes (256-bit) for HS256. "
+                    + "Current length: " + keyBytes.length + " bytes. "
+                    + "Set APP_JWT_SECRET environment variable with a sufficiently long value.");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String generateToken(String username) {

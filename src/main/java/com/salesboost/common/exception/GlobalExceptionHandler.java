@@ -16,6 +16,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
         ErrorCode errorCode = ex.getErrorCode();
+        log.warn("Business exception: [{}] {}", errorCode.name(), ex.getMessage());
         return ResponseEntity
                 .status(errorCode.getStatus())
                 .body(ApiResponse.fail(ex.getMessage()));
@@ -23,6 +24,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
+        log.warn("Authentication failed: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.fail("아이디 또는 비밀번호가 올바르지 않습니다."));
@@ -34,6 +36,7 @@ public class GlobalExceptionHandler {
                 ? ErrorCode.INVALID_REQUEST.getMessage()
                 : ex.getBindingResult().getFieldError().getDefaultMessage();
 
+        log.warn("Validation failed: {}", message);
         return ResponseEntity
                 .badRequest()
                 .body(ApiResponse.fail(message));

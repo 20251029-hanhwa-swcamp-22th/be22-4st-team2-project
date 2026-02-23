@@ -132,8 +132,8 @@ const formatDate = (dateString) => {
   })
 }
 
-const logout = () => {
-  authStore.logout()
+const logout = async () => {
+  await authStore.logout()
   router.push('/admin/login')
 }
 </script>

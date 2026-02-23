@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Gradle build output
+build
+.gradle
+
+# IDE
+.idea
+*.iml
+.vscode
+
+# Frontend (별도 Dockerfile로 빌드)
+frontend
+
+# Infrastructure (Docker 이미지에 불필요)
+infra
+docs
+
+# Environment / Secrets
+.env
+.env.*
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# CI/CD
+Jenkinsfile
+.claude

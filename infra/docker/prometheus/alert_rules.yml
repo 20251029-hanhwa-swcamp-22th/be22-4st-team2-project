@@ -1,0 +1,52 @@
+groups:
+  - name: salesboost-alerts
+    rules:
+      # 백엔드 서비스 다운 (5분 이상 메트릭 수집 실패)
+      - alert: BackendDown
+        expr: up{job="salesboost-backend"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SalesBoost 백엔드 서비스 다운"
+          description: "백엔드가 5분 이상 응답하지 않습니다."
+
+      # HTTP 5xx 에러율 5% 초과
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_requests_seconds_count[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx 에러율 높음"
+          description: "5분간 5xx 에러율이 5%를 초과했습니다. 현재: {{ $value | humanizePercentage }}"
+
+      # JVM 힙 메모리 사용률 80% 초과
+      - alert: HighJvmMemoryUsage
+        expr: |
+          (
+            jvm_memory_used_bytes{area="heap"}
+            /
+            jvm_memory_max_bytes{area="heap"}
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM 힙 메모리 사용률 높음"
+          description: "JVM 힙 사용률이 80%를 초과했습니다. 현재: {{ $value | humanizePercentage }}"
+
+      # HikariCP 커넥션 풀 고갈 (남은 커넥션 2개 이하)
+      - alert: DatabaseConnectionPoolLow
+        expr: hikaricp_connections_idle < 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 커넥션 풀 부족"
+          description: "사용 가능한 유휴 커넥션이 2개 미만입니다."

@@ -5,13 +5,21 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  # ⚠️ 프로덕션 배포 전 반드시 강력한 비밀번호로 변경하세요
+  # ⚠️ 절대 실제 비밀번호를 Git에 커밋하지 마세요!
+  # 아래는 placeholder입니다. 실제 배포 시 다음 명령어로 교체하세요:
   # kubectl create secret generic db-secret \
   #   --from-literal=root-password='your-strong-root-password' \
   #   --from-literal=password='your-strong-app-password' \
+  #   --from-literal=datasource-url='jdbc:mariadb://<DB-HOST>:<DB-PORT>/salesboost?allowPublicKeyRetrieval=true&useSSL=false' \
   #   --dry-run=client -o yaml | kubectl apply -f -
-  root-password: devops_team2
-  password: devops_team2
+  #
+  # 환경별 DB_HOST 예시:
+  #   외부 공용 DB:           221.148.116.109:10002
+  #   Docker Desktop K8s:    host.docker.internal:3306
+  #   K8s 내부 DB (Service): mariadb.default.svc.cluster.local:3306
+  root-password: CHANGE_ME_ROOT_PASSWORD
+  password: CHANGE_ME_APP_PASSWORD
+  datasource-url: CHANGE_ME_DATASOURCE_URL
 
 ---
 apiVersion: v1
@@ -21,9 +29,13 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  # ⚠️ 프로덕션 배포 전 반드시 32바이트 이상의 랜덤 키로 변경하세요
-  # 생성 예시: openssl rand -base64 48
-  jwt-secret: OitdYNE0L6ggftqNaxOQl4+fGBGbrK5p3cbyydOAplb4F3BoHQJGHxgqDEDGjJeD
+  # ⚠️ 절대 실제 JWT 키를 Git에 커밋하지 마세요!
+  # 아래는 placeholder입니다. 실제 배포 시 다음 명령어로 교체하세요:
+  # JWT_KEY=$(openssl rand -base64 48)
+  # kubectl create secret generic app-secret \
+  #   --from-literal=jwt-secret="$JWT_KEY" \
+  #   --dry-run=client -o yaml | kubectl apply -f -
+  jwt-secret: CHANGE_ME_JWT_SECRET_KEY
 
 ---
 apiVersion: v1
@@ -33,80 +45,17 @@ metadata:
   namespace: default
 data:
   DB_DATABASE: "salesboost"
-  DB_USERNAME: "root"
-  SPRING_DATASOURCE_URL: "jdbc:mariadb://221.148.116.109:10002/salesboost?allowPublicKeyRetrieval=true&useSSL=false"
-  # ⚠️ 프로덕션에서는 실제 서비스 도메인으로 변경
+  DB_USERNAME: "team2"
+  # ⚠️ 프로덕션 배포 전 반드시 실제 도메인으로 변경 (예: https://salesboost.com)
+  # localhost는 개발 환경 전용. 변경하지 않으면 프론트엔드 CORS 에러 발생
   APP_CORS_ALLOWED_ORIGINS: "http://localhost,http://localhost:80"
+  # 프로덕션에서는 validate 사용 (update는 스키마 자동 변경 위험)
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  # Logstash 접속 주소 (K8s 내부 Service DNS 사용)
+  # K8s 외부 Logstash 사용 시: 실제 IP/도메인으로 변경 (예: "192.168.1.100:5001")
+  LOGSTASH_HOST: "logstash:5001"
 
----
-# init.sql ConfigMap: K8s DB Pod 최초 기동 시 테이블 및 샘플 데이터 초기화에 사용
-# 내용이 길어 별도 apply 방식 권장:
-#   kubectl create configmap db-init-sql --from-file=init.sql=infra/docker/mariadb/init.sql
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: db-init-sql
-  namespace: default
-data:
-  init.sql: |
-    CREATE DATABASE IF NOT EXISTS salesboost CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    USE salesboost;
-    CREATE TABLE IF NOT EXISTS admin_user (
-        id BIGINT NOT NULL AUTO_INCREMENT,
-        username VARCHAR(100) NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        role VARCHAR(50) NOT NULL,
-        enabled TINYINT(1) NOT NULL DEFAULT 1,
-        PRIMARY KEY (id),
-        UNIQUE KEY uk_admin_user_username (username)
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-    CREATE TABLE IF NOT EXISTS inquiry (
-        id BIGINT NOT NULL AUTO_INCREMENT,
-        company_name VARCHAR(150) NOT NULL,
-        contact_name VARCHAR(100) NOT NULL,
-        email VARCHAR(150) NOT NULL,
-        phone VARCHAR(30) NOT NULL,
-        inquiry_type VARCHAR(30) NOT NULL,
-        content VARCHAR(3000) NOT NULL,
-        status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-        admin_memo VARCHAR(3000),
-        created_at DATETIME NOT NULL,
-        updated_at DATETIME NOT NULL,
-        PRIMARY KEY (id)
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-    CREATE TABLE IF NOT EXISTS portfolio (
-        id BIGINT NOT NULL AUTO_INCREMENT,
-        title VARCHAR(200) NOT NULL,
-        description VARCHAR(3000) NOT NULL,
-        client_name VARCHAR(150) NOT NULL,
-        industry VARCHAR(100) NOT NULL,
-        thumbnail_url VARCHAR(1000),
-        visible TINYINT(1) NOT NULL DEFAULT 1,
-        display_order INT NOT NULL DEFAULT 0,
-        created_at DATETIME NOT NULL,
-        updated_at DATETIME NOT NULL,
-        PRIMARY KEY (id)
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-    CREATE TABLE IF NOT EXISTS portfolio_image (
-        id BIGINT NOT NULL AUTO_INCREMENT,
-        portfolio_id BIGINT NOT NULL,
-        image_url VARCHAR(1000) NOT NULL,
-        image_order INT NOT NULL DEFAULT 0,
-        PRIMARY KEY (id),
-        CONSTRAINT fk_portfolio_image_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolio (id) ON DELETE CASCADE
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-    INSERT IGNORE INTO admin_user (username, password, role, enabled)
-    VALUES ('admin', '$2a$10$BeQwlhKlYhekHpFB1MAr..tz6.KbZH/o.1rpe1k/7nEV1FgQ8KvQm', 'ROLE_ADMIN', 1);
 
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: db-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
+# ⚠️ uploads-pvc 제거됨: ReadWriteOnce PVC는 HPA 스케일아웃 시 Multi-Attach 에러 발생
+# 현재 backend.yaml에서 emptyDir로 대체 (파드별 임시 저장소)
+# 운영 환경에서는 AWS S3 또는 MinIO 오브젝트 스토리지로 파일 업로드 로직 전환 필요

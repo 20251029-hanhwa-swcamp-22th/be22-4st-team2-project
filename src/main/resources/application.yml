@@ -1,4 +1,11 @@
+server:
+  # Graceful Shutdown: SIGTERM 수신 시 진행 중인 요청을 모두 완료한 뒤 종료
+  # K8s Rolling Update / HPA Scale-down 시 502 에러 및 데이터 유실 방지
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   datasource:
     # 로컬 개발 기본값. Docker 실행 시 환경변수(SPRING_DATASOURCE_URL)로 자동 오버라이드됨
     url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://127.0.0.1:3306/salesboost?allowPublicKeyRetrieval=true&useSSL=false}
@@ -7,11 +14,12 @@ spring:
     driver-class-name: org.mariadb.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    # show-sql/format_sql은 dev 프로파일에서만 활성화 (아래 참조)
+    show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
-        format_sql: true
+        format_sql: ${JPA_FORMAT_SQL:false}
   servlet:
     multipart:
       max-file-size: 10MB
@@ -22,10 +30,36 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: salesboost-backend
+
+# Swagger UI: 기본 비활성화 (프로덕션 보안). dev 프로파일에서만 활성화
+springdoc:
+  api-docs:
+    enabled: false
+    path: /api/v3/api-docs
+  swagger-ui:
+    enabled: false
+    path: /api/swagger-ui.html
+
 app:
   jwt:
     secret: ${APP_JWT_SECRET:change-this-to-very-long-secret-key-at-least-32bytes}
-    expiration-seconds: 3600
+    expiration-seconds: ${APP_JWT_EXPIRATION_SECONDS:3600}
+    refresh-expiration-days: ${APP_JWT_REFRESH_EXPIRATION_DAYS:7}
   file:
     upload-dir: uploads
   cors:
