@@ -32,6 +32,14 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built files from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# nginx 유저가 필요한 디렉토리에 쓰기 권한 부여
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
+
+USER nginx
+
 # Expose port 80
 EXPOSE 80
 

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <springProperty scope="context" name="APP_NAME" source="management.metrics.tags.application" defaultValue="salesboost-backend"/>
+
+    <!-- ============================================================ -->
+    <!-- CONSOLE appender (기존 로깅 유지)                              -->
+    <!-- ============================================================ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-}] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- LOGSTASH TCP appender (test 프로파일 제외)                     -->
+    <!-- LogstashTcpSocketAppender는 내부에 LMAX Disruptor 기반        -->
+    <!-- 비동기 링 버퍼를 사용하므로 별도 AsyncAppender 래핑 불필요     -->
+    <!-- ============================================================ -->
+    <springProfile name="!test">
+        <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+            <destination>${LOGSTASH_HOST:-logstash:5001}</destination>
+            <reconnectionDelay>5 seconds</reconnectionDelay>
+            <keepAliveDuration>5 minutes</keepAliveDuration>
+            <ringBufferSize>16384</ringBufferSize>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"application":"${APP_NAME}"}</customFields>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="LOGSTASH"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="test">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>

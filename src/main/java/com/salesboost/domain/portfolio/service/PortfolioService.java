@@ -7,7 +7,11 @@ import com.salesboost.domain.portfolio.entity.Portfolio;
 import com.salesboost.domain.portfolio.entity.PortfolioImage;
 import com.salesboost.domain.portfolio.repository.PortfolioRepository;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +29,7 @@ public class PortfolioService {
                 .toList();
     }
 
+    @CacheEvict(value = "publicPortfolios", allEntries = true)
     public Long createPortfolio(PortfolioCreateRequest request) {
         String thumbnailUrl = (request.getThumbnailUrl() != null && !request.getThumbnailUrl().trim().isEmpty())
                 ? request.getThumbnailUrl()
@@ -41,6 +46,7 @@ public class PortfolioService {
         return saved.getId();
     }
 
+    @CacheEvict(value = "publicPortfolios", allEntries = true)
     public void updatePortfolio(Long id, PortfolioUpdateRequest request) {
         Portfolio portfolio = findPortfolio(id);
 
@@ -62,29 +68,39 @@ public class PortfolioService {
         }
     }
 
+    @CacheEvict(value = "publicPortfolios", allEntries = true)
     public void deletePortfolio(Long id) {
         Portfolio portfolio = findPortfolio(id);
         portfolioRepository.delete(portfolio);
     }
 
+    @CacheEvict(value = "publicPortfolios", allEntries = true)
     public void updateVisibility(Long id, PortfolioVisibilityRequest request) {
         Portfolio portfolio = findPortfolio(id);
         portfolio.updateVisibility(request.getVisible());
     }
 
+    @CacheEvict(value = "publicPortfolios", allEntries = true)
     public void updateOrder(PortfolioVisibilityOrderRequest request) {
         List<Long> ids = request.getPortfolioIds();
         if (ids == null || ids.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "portfolioIds는 비어 있을 수 없습니다.");
         }
 
+        Map<Long, Portfolio> portfolioMap = portfolioRepository.findAllById(ids)
+                .stream().collect(Collectors.toMap(Portfolio::getId, p -> p));
+
         int order = 1;
         for (Long id : ids) {
-            Portfolio portfolio = findPortfolio(id);
+            Portfolio portfolio = portfolioMap.get(id);
+            if (portfolio == null) {
+                throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
+            }
             portfolio.updateDisplayOrder(order++);
         }
     }
 
+    @Cacheable("publicPortfolios")
     @Transactional(readOnly = true)
     public List<PortfolioResponse> getPublicPortfolios() {
         return portfolioRepository.findAllByVisibleTrueOrderByDisplayOrderAscIdDesc().stream()
@@ -102,7 +118,7 @@ public class PortfolioService {
     }
 
     private Portfolio findPortfolio(Long id) {
-        return portfolioRepository.findById(id)
+        return portfolioRepository.findWithImagesById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND));
     }
 

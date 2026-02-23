@@ -15,6 +15,14 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: default
+  # Secret 필드는 ArgoCD 동기화에서 제외 (kubectl로 직접 관리)
+  # selfHeal이 Git의 CHANGE_ME 값으로 운영 Secret을 원복하는 것을 방지
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+        - /stringData
   syncPolicy:
     automated:
       prune: true

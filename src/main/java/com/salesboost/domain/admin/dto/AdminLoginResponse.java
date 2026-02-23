@@ -7,7 +7,6 @@ import lombok.Getter;
 @AllArgsConstructor
 public class AdminLoginResponse {
     private String accessToken;
+    private String refreshToken;
     private String tokenType;
-
-
 }

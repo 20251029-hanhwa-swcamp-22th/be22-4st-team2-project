@@ -75,9 +75,23 @@ CREATE TABLE IF NOT EXISTS portfolio_image (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- 5. 기본 관리자 계정 삽입
+-- 5. refresh_token 테이블
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS refresh_token (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    admin_user_id BIGINT NOT NULL,
+    token VARCHAR(255) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_refresh_token_token (token),
+    CONSTRAINT fk_refresh_token_admin_user FOREIGN KEY (admin_user_id) REFERENCES admin_user (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- -------------------------------------------------------------
+-- 6. 기본 관리자 계정 삽입 (개발 환경 전용)
 --    username : admin
---    password : admin1234!  (BCrypt strength=10)
+--    ⚠️ 운영 환경에서는 이 계정을 삭제하고 별도 관리자 생성 필요
 -- -------------------------------------------------------------
 INSERT IGNORE INTO admin_user (username, password, role, enabled)
 VALUES (

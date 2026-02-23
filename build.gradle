@@ -28,6 +28,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.4'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
@@ -43,6 +47,12 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// plain jar 생성 방지: Spring Boot 2.5+ Gradle 빌드 시
+// *-plain.jar가 함께 생성되어 Docker COPY *.jar 실패 원인이 됨
+jar {
+    enabled = false
 }
 
 tasks.named('test') {

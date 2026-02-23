@@ -3,9 +3,9 @@ pipeline {
 
     environment {
         DOCKER_REGISTRY = 'ckato9173'
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        GITHUB_REPO = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
-        KUBECONFIG = 'C:\\Users\\playdata2\\.kube\\config'
+        IMAGE_TAG       = "${BUILD_NUMBER}"
+        GITHUB_REPO     = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
+        GITOPS_TMP_DIR  = "${WORKSPACE}/gitops-tmp/${BUILD_NUMBER}"
     }
 
     triggers {
@@ -29,9 +29,24 @@ pipeline {
             }
         }
 
-        stage('Backend Test') {
+        // [ci skip] 커밋에 의한 재트리거 방지 (GitOps 무한루프 차단)
+        stage('Skip CI Check') {
             steps {
-                bat 'gradlew.bat clean test'
+                script {
+                    def lastCommitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+                    if (lastCommitMsg.contains('[ci skip]') || lastCommitMsg.contains('[skip ci]')) {
+                        echo "CI skip detected in commit message: ${lastCommitMsg}"
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Skipping build — triggered by CI commit')
+                    }
+                }
+            }
+        }
+
+        stage('Backend Build & Test') {
+            steps {
+                // 테스트 + 빌드를 한 번에 수행 → Docker 단계에서 이중 빌드 방지
+                sh './gradlew clean build'
             }
             post {
                 always {
@@ -44,14 +59,30 @@ pipeline {
             parallel {
                 stage('Backend Image') {
                     steps {
-                        bat "docker build -t %DOCKER_REGISTRY%/salesboost-backend:%IMAGE_TAG% -t %DOCKER_REGISTRY%/salesboost-backend:latest ."
+                        sh "docker build -t ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} ."
                     }
                 }
                 stage('Frontend Image') {
                     steps {
-                        bat "docker build -t %DOCKER_REGISTRY%/salesboost-frontend:%IMAGE_TAG% -t %DOCKER_REGISTRY%/salesboost-frontend:latest ./frontend"
+                        sh "docker build -t ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} ./frontend"
                     }
                 }
+            }
+        }
+
+        // Trivy 이미지 취약점 스캔 (non-blocking: HIGH/CRITICAL만 리포트)
+        stage('Image Security Scan') {
+            steps {
+                sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 \
+                        ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} || true
+                """
+                sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 \
+                        ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} || true
+                """
             }
         }
 
@@ -62,43 +93,74 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    bat 'echo %DOCKER_PASS%| docker login -u %DOCKER_USER% --password-stdin'
-                    bat "docker push %DOCKER_REGISTRY%/salesboost-backend:%IMAGE_TAG%"
-                    bat "docker push %DOCKER_REGISTRY%/salesboost-backend:latest"
-                    bat "docker push %DOCKER_REGISTRY%/salesboost-frontend:%IMAGE_TAG%"
-                    bat "docker push %DOCKER_REGISTRY%/salesboost-frontend:latest"
+                    sh 'echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin'
+                    sh "docker push ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}"
+                    sh "docker push ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}"
                 }
             }
         }
 
-        stage('Deploy to K8s') {
+        // GitOps: kubectl apply/rollout restart 대신 K8s 매니페스트의 이미지 태그를 업데이트하고
+        // git commit & push하여 ArgoCD가 자동 Sync하도록 위임
+        stage('Update GitOps Manifest') {
             steps {
-                bat 'kubectl apply -f infra/k8s/common.yaml'
-                bat 'kubectl apply -f infra/k8s/deployments/backend.yaml'
-                bat 'kubectl apply -f infra/k8s/deployments/frontend.yaml'
-                bat 'kubectl apply -f infra/k8s/ingress.yaml'
-                bat 'kubectl rollout restart deployment salesboost-backend'
-                bat 'kubectl rollout restart deployment salesboost-frontend'
-            }
-        }
+                withCredentials([string(
+                    credentialsId: 'github-token',
+                    variable: 'GITHUB_TOKEN'
+                )]) {
+                    sh """
+                        rm -rf "${GITOPS_TMP_DIR}"
+                        git clone https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}"
+                    """
 
-        stage('Verify') {
-            steps {
-                bat 'kubectl rollout status deployment salesboost-backend --timeout=180s'
-                bat 'kubectl rollout status deployment salesboost-frontend --timeout=60s'
+                    sh """
+                        sed -i 's|${DOCKER_REGISTRY}/salesboost-backend:[^ ]*|${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/backend.yaml"
+                        sed -i 's|${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*|${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/frontend.yaml"
+                    """
+
+                    // 동시 파이프라인 실행 시 git push 충돌 방지를 위한 재시도 로직
+                    sh """
+                        cd "${GITOPS_TMP_DIR}" && \
+                        git config --local user.email "jenkins@salesboost.ci" && \
+                        git config --local user.name "Jenkins CI" && \
+                        git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml && \
+                        if git diff --cached --quiet; then \
+                            echo "No manifest changes detected, skipping commit"; \
+                        else \
+                            git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && \
+                            for i in 1 2 3; do \
+                                git pull --rebase origin main && \
+                                git push origin main && break || \
+                                echo "Push failed (attempt \$i/3), retrying in 5s..." && \
+                                sleep 5; \
+                            done; \
+                        fi
+                    """
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG}"
+            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG} pushed. ArgoCD will sync to cluster."
+            // ArgoCD sync 상태 확인 (argocd CLI가 설치된 경우)
+            sh '''
+                if command -v argocd &> /dev/null; then
+                    echo "Checking ArgoCD sync status..."
+                    argocd app wait salesboost --timeout 180 --health || \
+                        echo "WARNING: ArgoCD health check timed out. Manual verification required."
+                else
+                    echo "argocd CLI not found. Please verify deployment manually."
+                fi
+            '''
         }
         failure {
-            echo 'Pipeline FAILED'
+            echo "Pipeline FAILED at build ${IMAGE_TAG}"
         }
         always {
-            bat 'docker logout || exit 0'
+            sh 'docker logout || true'
+            sh "rm -rf \"${GITOPS_TMP_DIR}\""
         }
     }
 }

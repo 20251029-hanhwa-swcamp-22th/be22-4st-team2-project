@@ -1,0 +1,15 @@
+# 개발 환경 전용 설정 (로컬 개발 시 활성화)
+# 활성화 방법: SPRING_PROFILES_ACTIVE=dev 또는 --spring.profiles.active=dev
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# Swagger UI: dev 프로파일에서만 활성화
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
