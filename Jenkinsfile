@@ -33,7 +33,12 @@ pipeline {
         stage('Skip CI Check') {
             steps {
                 script {
-                    def lastCommitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+                    def lastCommitMsg
+                    if (isUnix()) {
+                        lastCommitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+                    } else {
+                        lastCommitMsg = bat(script: '@git log -1 --pretty=%%B', returnStdout: true).trim()
+                    }
                     if (lastCommitMsg.contains('[ci skip]') || lastCommitMsg.contains('[skip ci]')) {
                         echo "CI skip detected in commit message: ${lastCommitMsg}"
                         currentBuild.result = 'NOT_BUILT'
@@ -45,8 +50,13 @@ pipeline {
 
         stage('Backend Build & Test') {
             steps {
-                // 테스트 + 빌드를 한 번에 수행 → Docker 단계에서 이중 빌드 방지
-                sh './gradlew clean build'
+                script {
+                    if (isUnix()) {
+                        sh './gradlew clean build'
+                    } else {
+                        bat 'gradlew.bat clean build'
+                    }
+                }
             }
             post {
                 always {
@@ -59,12 +69,24 @@ pipeline {
             parallel {
                 stage('Backend Image') {
                     steps {
-                        sh "docker build -t ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} ."
+                        script {
+                            if (isUnix()) {
+                                sh "docker build -t ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} ."
+                            } else {
+                                bat "docker build -t ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} ."
+                            }
+                        }
                     }
                 }
                 stage('Frontend Image') {
                     steps {
-                        sh "docker build -t ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} ./frontend"
+                        script {
+                            if (isUnix()) {
+                                sh "docker build -t ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} ./frontend"
+                            } else {
+                                bat "docker build -t ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} .\\frontend"
+                            }
+                        }
                     }
                 }
             }
@@ -73,16 +95,23 @@ pipeline {
         // Trivy 이미지 취약점 스캔 (non-blocking: HIGH/CRITICAL만 리포트)
         stage('Image Security Scan') {
             steps {
-                sh """
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 \
-                        ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} || true
-                """
-                sh """
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 \
-                        ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} || true
-                """
+                script {
+                    if (isUnix()) {
+                        sh """
+                            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                                aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 \
+                                ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} || true
+                        """
+                        sh """
+                            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                                aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 \
+                                ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} || true
+                        """
+                    } else {
+                        bat "docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG} || exit 0"
+                        bat "docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 0 ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG} || exit 0"
+                    }
+                }
             }
         }
 
@@ -93,9 +122,17 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh 'echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin'
-                    sh "docker push ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}"
-                    sh "docker push ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}"
+                    script {
+                        if (isUnix()) {
+                            sh 'echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin'
+                            sh "docker push ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}"
+                            sh "docker push ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}"
+                        } else {
+                            bat 'docker login -u %DOCKER_USER% -p %DOCKER_PASS%'
+                            bat "docker push ${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}"
+                            bat "docker push ${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}"
+                        }
+                    }
                 }
             }
         }
@@ -108,34 +145,62 @@ pipeline {
                     credentialsId: 'github-token',
                     variable: 'GITHUB_TOKEN'
                 )]) {
-                    sh """
-                        rm -rf "${GITOPS_TMP_DIR}"
-                        git clone https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}"
-                    """
+                    script {
+                        if (isUnix()) {
+                            sh """
+                                rm -rf "${GITOPS_TMP_DIR}"
+                                git clone https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}"
+                            """
 
-                    sh """
-                        sed -i 's|${DOCKER_REGISTRY}/salesboost-backend:[^ ]*|${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/backend.yaml"
-                        sed -i 's|${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*|${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/frontend.yaml"
-                    """
+                            sh """
+                                sed -i 's|${DOCKER_REGISTRY}/salesboost-backend:[^ ]*|${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/backend.yaml"
+                                sed -i 's|${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*|${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/frontend.yaml"
+                            """
 
-                    // 동시 파이프라인 실행 시 git push 충돌 방지를 위한 재시도 로직
-                    sh """
-                        cd "${GITOPS_TMP_DIR}" && \
-                        git config --local user.email "jenkins@salesboost.ci" && \
-                        git config --local user.name "Jenkins CI" && \
-                        git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml && \
-                        if git diff --cached --quiet; then \
-                            echo "No manifest changes detected, skipping commit"; \
-                        else \
-                            git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && \
-                            for i in 1 2 3; do \
-                                git pull --rebase origin main && \
-                                git push origin main && break || \
-                                echo "Push failed (attempt \$i/3), retrying in 5s..." && \
-                                sleep 5; \
-                            done; \
-                        fi
-                    """
+                            // 동시 파이프라인 실행 시 git push 충돌 방지를 위한 재시도 로직
+                            sh """
+                                cd "${GITOPS_TMP_DIR}" && \
+                                git config --local user.email "jenkins@salesboost.ci" && \
+                                git config --local user.name "Jenkins CI" && \
+                                git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml && \
+                                if git diff --cached --quiet; then \
+                                    echo "No manifest changes detected, skipping commit"; \
+                                else \
+                                    git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && \
+                                    for i in 1 2 3; do \
+                                        git pull --rebase origin main && \
+                                        git push origin main && break || \
+                                        echo "Push failed (attempt \$i/3), retrying in 5s..." && \
+                                        sleep 5; \
+                                    done; \
+                                fi
+                            """
+                        } else {
+                            bat """
+                                if exist "${GITOPS_TMP_DIR}" rmdir /s /q "${GITOPS_TMP_DIR}"
+                                git clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}"
+                            """
+
+                            // Windows에서는 PowerShell로 sed 대체
+                            powershell """
+                                \$backend = '${GITOPS_TMP_DIR}/infra/k8s/deployments/backend.yaml'
+                                \$frontend = '${GITOPS_TMP_DIR}/infra/k8s/deployments/frontend.yaml'
+                                (Get-Content \$backend) -replace '${DOCKER_REGISTRY}/salesboost-backend:[^ ]*', '${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}' | Set-Content \$backend
+                                (Get-Content \$frontend) -replace '${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*', '${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}' | Set-Content \$frontend
+                            """
+
+                            bat """
+                                cd /d "${GITOPS_TMP_DIR}" && ^
+                                git config --local user.email "jenkins@salesboost.ci" && ^
+                                git config --local user.name "Jenkins CI" && ^
+                                git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml && ^
+                                git diff --cached --quiet && (echo No manifest changes detected, skipping commit) || ^
+                                (git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && ^
+                                git pull --rebase origin main && ^
+                                git push origin main)
+                            """
+                        }
+                    }
                 }
             }
         }
@@ -144,23 +209,42 @@ pipeline {
     post {
         success {
             echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG} pushed. ArgoCD will sync to cluster."
-            // ArgoCD sync 상태 확인 (argocd CLI가 설치된 경우)
-            sh '''
-                if command -v argocd &> /dev/null; then
-                    echo "Checking ArgoCD sync status..."
-                    argocd app wait salesboost --timeout 180 --health || \
-                        echo "WARNING: ArgoCD health check timed out. Manual verification required."
-                else
-                    echo "argocd CLI not found. Please verify deployment manually."
-                fi
-            '''
+            script {
+                if (isUnix()) {
+                    sh '''
+                        if command -v argocd &> /dev/null; then
+                            echo "Checking ArgoCD sync status..."
+                            argocd app wait salesboost --timeout 180 --health || \
+                                echo "WARNING: ArgoCD health check timed out. Manual verification required."
+                        else
+                            echo "argocd CLI not found. Please verify deployment manually."
+                        fi
+                    '''
+                } else {
+                    bat '''
+                        where argocd >nul 2>nul && (
+                            echo Checking ArgoCD sync status...
+                            argocd app wait salesboost --timeout 180 --health || echo WARNING: ArgoCD health check timed out. Manual verification required.
+                        ) || (
+                            echo argocd CLI not found. Please verify deployment manually.
+                        )
+                    '''
+                }
+            }
         }
         failure {
             echo "Pipeline FAILED at build ${IMAGE_TAG}"
         }
         always {
-            sh 'docker logout || true'
-            sh "rm -rf \"${GITOPS_TMP_DIR}\""
+            script {
+                if (isUnix()) {
+                    sh 'docker logout || true'
+                    sh "rm -rf \"${GITOPS_TMP_DIR}\""
+                } else {
+                    bat 'docker logout 2>nul || exit 0'
+                    bat "if exist \"${GITOPS_TMP_DIR}\" rmdir /s /q \"${GITOPS_TMP_DIR}\""
+                }
+            }
         }
     }
 }
