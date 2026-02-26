@@ -5,8 +5,8 @@ pipeline {
         DOCKER_REGISTRY = 'ckato9173'
         IMAGE_TAG       = "${BUILD_NUMBER}"
         GITHUB_REPO     = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
+        MANIFEST_REPO   = 'https://github.com/fdrn9999/team2-manifest.git'
         GITOPS_TMP_DIR  = "${WORKSPACE}/gitops-tmp/${BUILD_NUMBER}"
-        GITOPS_BRANCH   = 'gitops/deploy'
     }
 
     triggers {
@@ -138,9 +138,8 @@ pipeline {
             }
         }
 
-        // GitOps: K8s 매니페스트의 이미지 태그를 업데이트하고
-        // gitops/deploy 브랜치에 commit & push하여 ArgoCD가 자동 Sync하도록 위임
-        // main 브랜치는 branch protection(PR+리뷰)이 적용되므로 별도 브랜치 사용
+        // GitOps: 별도 매니페스트 레포(team2-manifest)의 이미지 태그를 업데이트하고
+        // main 브랜치에 commit & push하여 ArgoCD가 자동 Sync하도록 위임
         stage('Update GitOps Manifest') {
             steps {
                 withCredentials([string(
@@ -151,14 +150,12 @@ pipeline {
                         if (isUnix()) {
                             sh """
                                 rm -rf "${GITOPS_TMP_DIR}"
-                                git clone --branch ${GITOPS_BRANCH} https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}" || \
-                                (git clone https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}" && \
-                                 cd "${GITOPS_TMP_DIR}" && git checkout -b ${GITOPS_BRANCH})
+                                git clone https://${GITHUB_TOKEN}@github.com/fdrn9999/team2-manifest.git "${GITOPS_TMP_DIR}"
                             """
 
                             sh """
-                                sed -i 's|${DOCKER_REGISTRY}/salesboost-backend:[^ ]*|${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/backend.yaml"
-                                sed -i 's|${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*|${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/infra/k8s/deployments/frontend.yaml"
+                                sed -i 's|${DOCKER_REGISTRY}/salesboost-backend:[^ ]*|${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/deployments/backend.yaml"
+                                sed -i 's|${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*|${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}|g' "${GITOPS_TMP_DIR}/deployments/frontend.yaml"
                             """
 
                             // 동시 파이프라인 실행 시 git push 충돌 방지를 위한 재시도 로직
@@ -166,14 +163,14 @@ pipeline {
                                 cd "${GITOPS_TMP_DIR}" && \
                                 git config --local user.email "jenkins@salesboost.ci" && \
                                 git config --local user.name "Jenkins CI" && \
-                                git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml && \
+                                git add deployments/backend.yaml deployments/frontend.yaml && \
                                 if git diff --cached --quiet; then \
                                     echo "No manifest changes detected, skipping commit"; \
                                 else \
-                                    git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && \
+                                    git commit -m "ci: update image tags to ${IMAGE_TAG}" && \
                                     for i in 1 2 3; do \
-                                        (git pull --rebase origin ${GITOPS_BRANCH} 2>/dev/null || echo "No remote branch yet, first push") && \
-                                        git push origin ${GITOPS_BRANCH} && break || \
+                                        git pull --rebase origin main && \
+                                        git push origin main && break || \
                                         echo "Push failed (attempt \$i/3), retrying in 5s..." && \
                                         sleep 5; \
                                     done; \
@@ -182,22 +179,14 @@ pipeline {
                         } else {
                             bat "if exist \"${GITOPS_TMP_DIR}\" rmdir /s /q \"${GITOPS_TMP_DIR}\""
 
-                            // gitops/deploy 브랜치가 있으면 clone, 없으면 main에서 새로 생성
+                            // 매니페스트 레포 clone
                             // credential.helper= : Windows GCM이 URL 토큰을 무시하는 것을 방지
-                            script {
-                                def cloneResult = bat(script: "git -c credential.helper= clone --branch ${GITOPS_BRANCH} https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\"", returnStatus: true)
-                                if (cloneResult != 0) {
-                                    bat "git -c credential.helper= clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\""
-                                    dir("${GITOPS_TMP_DIR}") {
-                                        bat "git checkout -b ${GITOPS_BRANCH}"
-                                    }
-                                }
-                            }
+                            bat "git -c credential.helper= clone https://%GITHUB_TOKEN%@github.com/fdrn9999/team2-manifest.git \"${GITOPS_TMP_DIR}\""
 
                             // Windows에서는 PowerShell로 sed 대체
                             powershell """
-                                \$backend = '${GITOPS_TMP_DIR}/infra/k8s/deployments/backend.yaml'
-                                \$frontend = '${GITOPS_TMP_DIR}/infra/k8s/deployments/frontend.yaml'
+                                \$backend = '${GITOPS_TMP_DIR}/deployments/backend.yaml'
+                                \$frontend = '${GITOPS_TMP_DIR}/deployments/frontend.yaml'
                                 (Get-Content \$backend) -replace '${DOCKER_REGISTRY}/salesboost-backend:[^ ]*', '${DOCKER_REGISTRY}/salesboost-backend:${IMAGE_TAG}' | Set-Content \$backend
                                 (Get-Content \$frontend) -replace '${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*', '${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}' | Set-Content \$frontend
                             """
@@ -205,16 +194,12 @@ pipeline {
                             dir("${GITOPS_TMP_DIR}") {
                                 bat 'git config --local user.email "jenkins@salesboost.ci"'
                                 bat 'git config --local user.name "Jenkins CI"'
-                                bat 'git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml'
+                                bat 'git add deployments/backend.yaml deployments/frontend.yaml'
                                 def hasChanges = bat(script: '@git diff --cached --quiet', returnStatus: true)
                                 if (hasChanges != 0) {
-                                    bat "git commit -m \"ci: update image tags to ${IMAGE_TAG} [ci skip]\""
-                                    // pull은 원격 브랜치가 없을 수 있으므로 실패 허용
-                                    def pullResult = bat(script: "git -c credential.helper= pull --rebase origin ${GITOPS_BRANCH}", returnStatus: true)
-                                    if (pullResult != 0) {
-                                        echo "First push to ${GITOPS_BRANCH}, no remote branch yet"
-                                    }
-                                    bat "git -c credential.helper= push origin ${GITOPS_BRANCH}"
+                                    bat "git commit -m \"ci: update image tags to ${IMAGE_TAG}\""
+                                    bat "git -c credential.helper= pull --rebase origin main"
+                                    bat "git -c credential.helper= push origin main"
                                 } else {
                                     echo 'No manifest changes detected, skipping commit'
                                 }
@@ -228,7 +213,7 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG} pushed to ${GITOPS_BRANCH}. ArgoCD will sync to cluster."
+            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG} pushed to team2-manifest. ArgoCD will sync to cluster."
             script {
                 if (isUnix()) {
                     sh '''

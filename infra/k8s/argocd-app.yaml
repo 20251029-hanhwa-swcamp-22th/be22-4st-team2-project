@@ -6,12 +6,11 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git
-    targetRevision: gitops/deploy
-    path: infra/k8s
+    repoURL: https://github.com/fdrn9999/team2-manifest.git
+    targetRevision: main
+    path: .
     directory:
       recurse: true
-      exclude: argocd-app.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: default
