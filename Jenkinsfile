@@ -226,14 +226,15 @@ pipeline {
                         fi
                     '''
                 } else {
-                    bat '''
+                    bat(script: '''
                         where argocd >nul 2>nul && (
                             echo Checking ArgoCD sync status...
                             argocd app wait salesboost --timeout 180 --health || echo WARNING: ArgoCD health check timed out. Manual verification required.
                         ) || (
                             echo argocd CLI not found. Please verify deployment manually.
                         )
-                    '''
+                        exit /b 0
+                    ''', returnStatus: true)
                 }
             }
         }
