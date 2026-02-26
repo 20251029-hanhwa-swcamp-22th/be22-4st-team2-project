@@ -183,10 +183,11 @@ pipeline {
                             bat "if exist \"${GITOPS_TMP_DIR}\" rmdir /s /q \"${GITOPS_TMP_DIR}\""
 
                             // gitops/deploy 브랜치가 있으면 clone, 없으면 main에서 새로 생성
+                            // credential.helper= : Windows GCM이 URL 토큰을 무시하는 것을 방지
                             script {
-                                def cloneResult = bat(script: "git clone --branch ${GITOPS_BRANCH} https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\"", returnStatus: true)
+                                def cloneResult = bat(script: "git -c credential.helper= clone --branch ${GITOPS_BRANCH} https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\"", returnStatus: true)
                                 if (cloneResult != 0) {
-                                    bat "git clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\""
+                                    bat "git -c credential.helper= clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\""
                                     dir("${GITOPS_TMP_DIR}") {
                                         bat "git checkout -b ${GITOPS_BRANCH}"
                                     }
@@ -209,11 +210,11 @@ pipeline {
                                 if (hasChanges != 0) {
                                     bat "git commit -m \"ci: update image tags to ${IMAGE_TAG} [ci skip]\""
                                     // pull은 원격 브랜치가 없을 수 있으므로 실패 허용
-                                    def pullResult = bat(script: "git pull --rebase origin ${GITOPS_BRANCH}", returnStatus: true)
+                                    def pullResult = bat(script: "git -c credential.helper= pull --rebase origin ${GITOPS_BRANCH}", returnStatus: true)
                                     if (pullResult != 0) {
                                         echo "First push to ${GITOPS_BRANCH}, no remote branch yet"
                                     }
-                                    bat "git push origin ${GITOPS_BRANCH}"
+                                    bat "git -c credential.helper= push origin ${GITOPS_BRANCH}"
                                 } else {
                                     echo 'No manifest changes detected, skipping commit'
                                 }
