@@ -20,7 +20,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: salesboost-backend
-          image: ckato9173/salesboost-backend:29
+          image: ckato9173/salesboost-backend:32
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
