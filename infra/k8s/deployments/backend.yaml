@@ -16,11 +16,11 @@ spec:
         prometheus.io/path: "/actuator/prometheus"
         prometheus.io/port: "8081"
     spec:
-      # Graceful Shutdown: Spring Boot가 진행 중인 요청을 완료할 때까지 대기 (20s + 여유 10s)
+      # Graceful Shutdown: Spring Boot가 진행 중인 ?�청???�료???�까지 ?��?(20s + ?�유 10s)
       terminationGracePeriodSeconds: 30
       containers:
         - name: salesboost-backend
-          image: ckato9173/salesboost-backend:latest
+          image: ckato9173/salesboost-backend:37
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -88,12 +88,12 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
       volumes:
-        # emptyDir: HPA 스케일아웃 시 모든 노드에서 마운트 가능 (PVC RWO 충돌 방지)
-        # ⚠️ 주의사항:
-        #   1) 파드 재시작 시 업로드 파일 유실됨
-        #   2) 멀티 Pod 환경에서 A Pod에 업로드된 파일을 B Pod에서 조회 불가 (404 발생)
-        # 근본 해결: AWS S3 / MinIO 오브젝트 스토리지로 파일 업로드 로직 전환
-        # 임시 해결: replicas를 1로 고정하거나 AWS EFS(ReadWriteMany) 볼륨 사용
+        # emptyDir: HPA ?��??�아????모든 ?�드?�서 마운??가??(PVC RWO 충돌 방�?)
+        # ?�️ 주의?�항:
+        #   1) ?�드 ?�시?????�로???�일 ?�실??
+        #   2) 멀??Pod ?�경?�서 A Pod???�로?�된 ?�일??B Pod?�서 조회 불�? (404 발생)
+        # 근본 ?�결: AWS S3 / MinIO ?�브?�트 ?�토리�?�??�일 ?�로??로직 ?�환
+        # ?�시 ?�결: replicas�?1�?고정?�거??AWS EFS(ReadWriteMany) 볼륨 ?�용
         - name: uploads-data
           emptyDir: {}
 ---
