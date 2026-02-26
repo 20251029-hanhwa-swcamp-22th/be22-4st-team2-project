@@ -172,7 +172,7 @@ pipeline {
                                 else \
                                     git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && \
                                     for i in 1 2 3; do \
-                                        git pull --rebase origin ${GITOPS_BRANCH} && \
+                                        (git pull --rebase origin ${GITOPS_BRANCH} 2>/dev/null || echo "No remote branch yet, first push") && \
                                         git push origin ${GITOPS_BRANCH} && break || \
                                         echo "Push failed (attempt \$i/3), retrying in 5s..." && \
                                         sleep 5; \
@@ -208,7 +208,11 @@ pipeline {
                                 def hasChanges = bat(script: '@git diff --cached --quiet', returnStatus: true)
                                 if (hasChanges != 0) {
                                     bat "git commit -m \"ci: update image tags to ${IMAGE_TAG} [ci skip]\""
-                                    bat "git pull --rebase origin ${GITOPS_BRANCH} || echo First push to ${GITOPS_BRANCH}, no remote branch yet"
+                                    // pull은 원격 브랜치가 없을 수 있으므로 실패 허용
+                                    def pullResult = bat(script: "git pull --rebase origin ${GITOPS_BRANCH}", returnStatus: true)
+                                    if (pullResult != 0) {
+                                        echo "First push to ${GITOPS_BRANCH}, no remote branch yet"
+                                    }
                                     bat "git push origin ${GITOPS_BRANCH}"
                                 } else {
                                     echo 'No manifest changes detected, skipping commit'
