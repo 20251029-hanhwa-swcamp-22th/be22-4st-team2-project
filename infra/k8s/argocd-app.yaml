@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git
-    targetRevision: main
+    targetRevision: gitops/deploy
     path: infra/k8s
     directory:
       recurse: true

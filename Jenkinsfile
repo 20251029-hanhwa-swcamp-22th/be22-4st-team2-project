@@ -6,6 +6,7 @@ pipeline {
         IMAGE_TAG       = "${BUILD_NUMBER}"
         GITHUB_REPO     = 'https://github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git'
         GITOPS_TMP_DIR  = "${WORKSPACE}/gitops-tmp/${BUILD_NUMBER}"
+        GITOPS_BRANCH   = 'gitops/deploy'
     }
 
     triggers {
@@ -137,8 +138,9 @@ pipeline {
             }
         }
 
-        // GitOps: kubectl apply/rollout restart 대신 K8s 매니페스트의 이미지 태그를 업데이트하고
-        // git commit & push하여 ArgoCD가 자동 Sync하도록 위임
+        // GitOps: K8s 매니페스트의 이미지 태그를 업데이트하고
+        // gitops/deploy 브랜치에 commit & push하여 ArgoCD가 자동 Sync하도록 위임
+        // main 브랜치는 branch protection(PR+리뷰)이 적용되므로 별도 브랜치 사용
         stage('Update GitOps Manifest') {
             steps {
                 withCredentials([string(
@@ -149,7 +151,9 @@ pipeline {
                         if (isUnix()) {
                             sh """
                                 rm -rf "${GITOPS_TMP_DIR}"
-                                git clone https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}"
+                                git clone --branch ${GITOPS_BRANCH} https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}" || \
+                                (git clone https://${GITHUB_TOKEN}@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}" && \
+                                 cd "${GITOPS_TMP_DIR}" && git checkout -b ${GITOPS_BRANCH})
                             """
 
                             sh """
@@ -168,8 +172,8 @@ pipeline {
                                 else \
                                     git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && \
                                     for i in 1 2 3; do \
-                                        git pull --rebase origin main && \
-                                        git push origin main && break || \
+                                        git pull --rebase origin ${GITOPS_BRANCH} && \
+                                        git push origin ${GITOPS_BRANCH} && break || \
                                         echo "Push failed (attempt \$i/3), retrying in 5s..." && \
                                         sleep 5; \
                                     done; \
@@ -177,7 +181,17 @@ pipeline {
                             """
                         } else {
                             bat "if exist \"${GITOPS_TMP_DIR}\" rmdir /s /q \"${GITOPS_TMP_DIR}\""
-                            bat "git clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\""
+
+                            // gitops/deploy 브랜치가 있으면 clone, 없으면 main에서 새로 생성
+                            script {
+                                def cloneResult = bat(script: "git clone --branch ${GITOPS_BRANCH} https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\"", returnStatus: true)
+                                if (cloneResult != 0) {
+                                    bat "git clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\""
+                                    dir("${GITOPS_TMP_DIR}") {
+                                        bat "git checkout -b ${GITOPS_BRANCH}"
+                                    }
+                                }
+                            }
 
                             // Windows에서는 PowerShell로 sed 대체
                             powershell """
@@ -194,8 +208,8 @@ pipeline {
                                 def hasChanges = bat(script: '@git diff --cached --quiet', returnStatus: true)
                                 if (hasChanges != 0) {
                                     bat "git commit -m \"ci: update image tags to ${IMAGE_TAG} [ci skip]\""
-                                    bat 'git pull --rebase origin main'
-                                    bat 'git push origin main'
+                                    bat "git pull --rebase origin ${GITOPS_BRANCH} || echo First push to ${GITOPS_BRANCH}, no remote branch yet"
+                                    bat "git push origin ${GITOPS_BRANCH}"
                                 } else {
                                     echo 'No manifest changes detected, skipping commit'
                                 }
@@ -209,7 +223,7 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG} pushed. ArgoCD will sync to cluster."
+            echo "Pipeline SUCCESS - image tag: ${IMAGE_TAG} pushed to ${GITOPS_BRANCH}. ArgoCD will sync to cluster."
             script {
                 if (isUnix()) {
                     sh '''
