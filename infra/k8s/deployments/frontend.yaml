@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: salesboost-frontend
-          image: ckato9173/salesboost-frontend:24
+          image: ckato9173/salesboost-frontend:25
           imagePullPolicy: Always
           ports:
             - containerPort: 80
