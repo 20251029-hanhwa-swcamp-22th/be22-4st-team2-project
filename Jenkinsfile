@@ -176,10 +176,8 @@ pipeline {
                                 fi
                             """
                         } else {
-                            bat """
-                                if exist "${GITOPS_TMP_DIR}" rmdir /s /q "${GITOPS_TMP_DIR}"
-                                git clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git "${GITOPS_TMP_DIR}"
-                            """
+                            bat "if exist \"${GITOPS_TMP_DIR}\" rmdir /s /q \"${GITOPS_TMP_DIR}\""
+                            bat "git clone https://%GITHUB_TOKEN%@github.com/20251029-hanhwa-swcamp-22th/be22-4st-team2-project.git \"${GITOPS_TMP_DIR}\""
 
                             // Windows에서는 PowerShell로 sed 대체
                             powershell """
@@ -189,16 +187,19 @@ pipeline {
                                 (Get-Content \$frontend) -replace '${DOCKER_REGISTRY}/salesboost-frontend:[^ ]*', '${DOCKER_REGISTRY}/salesboost-frontend:${IMAGE_TAG}' | Set-Content \$frontend
                             """
 
-                            bat """
-                                cd /d "${GITOPS_TMP_DIR}" && ^
-                                git config --local user.email "jenkins@salesboost.ci" && ^
-                                git config --local user.name "Jenkins CI" && ^
-                                git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml && ^
-                                git diff --cached --quiet && (echo No manifest changes detected, skipping commit) || ^
-                                (git commit -m "ci: update image tags to ${IMAGE_TAG} [ci skip]" && ^
-                                git pull --rebase origin main && ^
-                                git push origin main)
-                            """
+                            dir("${GITOPS_TMP_DIR}") {
+                                bat 'git config --local user.email "jenkins@salesboost.ci"'
+                                bat 'git config --local user.name "Jenkins CI"'
+                                bat 'git add infra/k8s/deployments/backend.yaml infra/k8s/deployments/frontend.yaml'
+                                def hasChanges = bat(script: '@git diff --cached --quiet', returnStatus: true)
+                                if (hasChanges != 0) {
+                                    bat "git commit -m \"ci: update image tags to ${IMAGE_TAG} [ci skip]\""
+                                    bat 'git pull --rebase origin main'
+                                    bat 'git push origin main'
+                                } else {
+                                    echo 'No manifest changes detected, skipping commit'
+                                }
+                            }
                         }
                     }
                 }
