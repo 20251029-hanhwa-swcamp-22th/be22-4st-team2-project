@@ -30,25 +30,6 @@ pipeline {
             }
         }
 
-        // [ci skip] 커밋에 의한 재트리거 방지 (GitOps 무한루프 차단)
-        stage('Skip CI Check') {
-            steps {
-                script {
-                    def lastCommitMsg
-                    if (isUnix()) {
-                        lastCommitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
-                    } else {
-                        lastCommitMsg = bat(script: '@git log -1 --pretty=%%B', returnStdout: true).trim()
-                    }
-                    if (lastCommitMsg.contains('[ci skip]') || lastCommitMsg.contains('[skip ci]')) {
-                        echo "CI skip detected in commit message: ${lastCommitMsg}"
-                        currentBuild.result = 'NOT_BUILT'
-                        error('Skipping build — triggered by CI commit')
-                    }
-                }
-            }
-        }
-
         stage('Backend Build & Test') {
             steps {
                 script {
